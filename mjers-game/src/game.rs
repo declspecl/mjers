@@ -16,6 +16,8 @@ use mjers_rules::{
     Ruleset,
     SEATS,
     Seat,
+    Settlement,
+    WinSource,
 };
 use mjers_tile::counts::COPIES;
 use mjers_tile::{
@@ -132,6 +134,9 @@ impl Game {
                 let hand = self.hand(seat);
                 let mut actions = Vec::new();
                 if !after_claim {
+                    if hand.is_winning() {
+                        actions.push(Action::SelfDrawWin);
+                    }
                     let can_replace = self.wall.remaining() > 0;
                     let concealed = hand.concealed();
                     if can_replace && hand.meld_count() < MAX_MELDS {
@@ -168,6 +173,7 @@ impl Game {
         }
         match action {
             Action::Discard(tile) => self.discard(seat, tile),
+            Action::SelfDrawWin => self.end_with_win(seat, WinSource::SelfDraw),
             Action::ConcealedKong(tile) => {
                 self.hands[seat.index()].declare_concealed_kong(tile).expect("kong was legal");
                 for _ in 0..COPIES {
@@ -181,7 +187,6 @@ impl Game {
                 self.start_turn(seat, true);
             },
             Action::Pass | Action::Chow(_) | Action::Pong | Action::Kong | Action::Win => self.decide(seat, action),
-            _ => unreachable!("not offered: {action}"),
         }
         Ok(())
     }
@@ -207,7 +212,7 @@ impl Game {
         self.last_draw = None;
         let next = if replacement { self.wall.draw_replacement() } else { self.wall.draw() };
         let Some(next) = next else {
-            self.end(HandResult::default());
+            self.end_exhausted();
             return;
         };
         if let Some(drawn) = self.receive(seat, next) {
@@ -235,7 +240,7 @@ impl Game {
                     match self.wall.draw_replacement() {
                         Some(next) => tile = next,
                         None => {
-                            self.end(HandResult::default());
+                            self.end_exhausted();
                             return None;
                         },
                     }
@@ -249,6 +254,12 @@ impl Game {
         result: HandResult,
     ) {
         self.phase = Phase::Ended(result);
+    }
+
+    /// The wall ran out: no winner, but kongs still count.
+    fn end_exhausted(&mut self) {
+        let result = HandResult { win: None, kongs: self.kongs() };
+        self.end(result);
     }
 
     pub fn rules(&self) -> &Ruleset {
@@ -272,6 +283,11 @@ impl Game {
             Phase::Ended(result) => Some(result),
             _ => None,
         }
+    }
+
+    /// Payments once the hand is over.
+    pub fn settlement(&self) -> Option<Settlement> {
+        self.result().map(|result| self.rules.payouts.settle(result))
     }
 
     pub fn hand(

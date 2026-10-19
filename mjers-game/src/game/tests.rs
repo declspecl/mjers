@@ -255,3 +255,47 @@ fn no_kong_declarations_right_after_a_claim() {
     game.apply(S[1], Action::Pong).unwrap();
     assert!(game.legal_actions(S[1]).iter().all(|a| matches!(a, Action::Discard(_))));
 }
+
+#[test]
+fn self_drawn_win_settles_three_each_plus_flowers() {
+    let hands = ["123456789m1112z", "123456789p5566z", "123456789s5567z", "123456789m3467z"];
+    let mut game = game(hands, "1F", "2z");
+    assert_eq!(game.legal_actions(S[0])[0], Action::SelfDrawWin);
+    game.apply(S[0], Action::SelfDrawWin).unwrap();
+    let win = game.result().unwrap().win.unwrap();
+    assert_eq!((win.winner, win.source, win.bonus_tiles), (S[0], WinSource::SelfDraw, 1));
+    assert_eq!(game.settlement().unwrap().total(), [12, -4, -4, -4]);
+    assert!(game.to_act().is_empty());
+}
+
+#[test]
+fn discard_win_settles_with_the_discarder_paying_double() {
+    let mut game = contested();
+    game.apply(S[1], Action::Win).unwrap();
+    game.apply(S[2], Action::Pass).unwrap();
+    game.apply(S[3], Action::Pass).unwrap();
+    assert_eq!(game.settlement().unwrap().total(), [-2, 4, -1, -1]);
+}
+
+#[test]
+fn kongs_are_paid_when_the_wall_runs_out() {
+    let hands = ["1111m56789m1234z", "123456789p1234z", "123456789s1234z", "23456789m55667z"];
+    let mut game = game(hands, "7z", "7p");
+    game.apply(S[0], Action::ConcealedKong(tile("1m"))).unwrap();
+    while let Some(&seat) = game.to_act().first() {
+        let legal = game.legal_actions(seat);
+        let action = if legal.contains(&Action::Pass) {
+            Action::Pass
+        } else {
+            *legal.iter().rev().find(|a| matches!(a, Action::Discard(_))).unwrap()
+        };
+        game.apply(seat, action).unwrap();
+    }
+    let result = game.result().unwrap();
+    assert_eq!(result.win, None);
+    assert!(result.kongs.contains(&mjers_rules::Kong {
+        owner: S[0],
+        kind: KongKind::Concealed
+    }));
+    assert_eq!(game.settlement().unwrap().kongs[0], 6 * result.kongs.iter().filter(|k| k.owner == S[0]).count() as i32);
+}
