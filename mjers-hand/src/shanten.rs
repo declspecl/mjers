@@ -15,7 +15,7 @@ mod tests;
 use std::cell::RefCell;
 use std::sync::OnceLock;
 
-use mjers_tile::TileCounts;
+use mjers_tile::counts::TileCounts;
 use mjers_tile::tile::{
     KINDS,
     SUITED_KINDS,
@@ -68,6 +68,36 @@ impl Summary {
             }
         }
         Summary(out)
+    }
+
+    /// Shanten of the hand made of `self` and `other`, without building their
+    /// combined summary.
+    fn shanten_with(
+        self,
+        other: Summary,
+        melds: usize,
+    ) -> i8 {
+        let mut best = MAX_SHANTEN;
+        for (s1, row1) in self.0.iter().enumerate() {
+            for (e1, &p1) in row1.iter().enumerate() {
+                if p1 == IMPOSSIBLE {
+                    continue;
+                }
+                for (s2, row2) in other.0.iter().enumerate() {
+                    let sets = (s1 + s2 + melds) as i8;
+                    if sets > MAX_MELDS as i8 {
+                        break;
+                    }
+                    for (e2, &p2) in row2.iter().enumerate().take(2 - e1) {
+                        if p2 != IMPOSSIBLE {
+                            let partials = (p1 + p2).min(MAX_MELDS as i8 - sets);
+                            best = best.min(MAX_SHANTEN - 2 * sets - partials - (e1 + e2) as i8);
+                        }
+                    }
+                }
+            }
+        }
+        best
     }
 
     /// Shanten of a whole hand summarised by `self`, beside `melds` declared melds.
@@ -147,7 +177,7 @@ pub(crate) fn shanten_with(
     group: usize,
     melds: usize,
 ) -> i8 {
-    others.combine(group_summary(counts, group)).shanten(melds)
+    group_summary(counts, group).shanten_with(others, melds)
 }
 
 /// Shanten of `concealed` beside `melds` declared melds.
@@ -196,7 +226,7 @@ static HONOR_SUMMARY_BY_SHAPE: OnceLock<[Summary; 512]> = OnceLock::new();
 
 /// Direct-mapped cache of suit summaries keyed by the suit's base-5 counts.
 /// A collision simply recomputes.
-const SUIT_CACHE_SLOTS: usize = 1 << 15;
+const SUIT_CACHE_SLOTS: usize = 1 << 17;
 const EMPTY_SLOT: u32 = u32::MAX;
 
 struct SuitCache {
@@ -216,7 +246,7 @@ fn suit_summary(suit: [u8; RANKS]) -> Summary {
         return Summary::EMPTY;
     }
     let key = suit.iter().fold(0u32, |key, &n| key * 5 + n as u32);
-    let slot = (key.wrapping_mul(0x9E37_79B1) >> 17) as usize % SUIT_CACHE_SLOTS;
+    let slot = (key.wrapping_mul(0x9E37_79B1) >> 15) as usize % SUIT_CACHE_SLOTS;
     SUIT_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
         if cache.key_by_slot[slot] == key {
