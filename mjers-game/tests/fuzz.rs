@@ -5,17 +5,16 @@ use std::sync::Arc;
 use mjers_game::wall::WALL_SIZE;
 use mjers_game::{
     Action,
+    Event,
     Game,
+    Offer,
     Phase,
     Rng,
     Ruleset,
     Seat,
 };
 use mjers_hand::Meld;
-use mjers_rules::{
-    Win,
-    WinSource,
-};
+use mjers_rules::WinSource;
 use mjers_tile::TileCounts;
 
 const GAMES: u64 = 2_000;
@@ -36,13 +35,18 @@ fn check_invariants(game: &Game) {
         public.add(tile);
     }
     // A discard won on stays public though it now completes the winner's hand.
-    if let Some(Some(Win { source: WinSource::Discard(_), .. })) = game.result().map(|r| r.win) {
-        public.add(game.discards().last().unwrap().tile);
+    if let Some(Event::Win {
+        source: WinSource::Discard(_), tile, ..
+    }) = game.events().last()
+    {
+        public.add(*tile);
     }
     assert_eq!(&public, game.public_tiles(), "public tiles");
 
+    // The player taking a turn, or adding to a kong others may rob, holds 14.
     let acting = match game.phase() {
         Phase::Turn { seat, .. } => Some(*seat),
+        Phase::Claim { from, offer: Offer::KongUpgrade, .. } => Some(*from),
         _ => None,
     };
     if !game.is_over() {
@@ -55,7 +59,19 @@ fn check_invariants(game: &Game) {
 
 #[test]
 fn random_play_preserves_invariants_and_replays() {
-    let rules = Arc::new(Ruleset::family());
+    fuzz(Ruleset::family());
+}
+
+#[test]
+fn random_play_with_kong_robbing() {
+    fuzz(Ruleset {
+        allow_rob_kong: true,
+        ..Ruleset::family()
+    });
+}
+
+fn fuzz(rules: Ruleset) {
+    let rules = Arc::new(rules);
     let (mut wins, mut kongs, mut claims) = (0, 0, 0);
     for seed in 0..GAMES {
         let mut game = Game::new(rules.clone(), seed, Seat::ALL[(seed % 4) as usize]);

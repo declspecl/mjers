@@ -38,13 +38,37 @@ pub const TRACE_VERSION: u32 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
-    Deal { seat: Seat, tiles: TileCounts },
-    Bonus { seat: Seat, bonus: Bonus },
-    Draw { seat: Seat, tile: Tile },
-    Discard { seat: Seat, tile: Tile },
-    Claim { seat: Seat, from: Seat, meld: Meld },
-    Kong { seat: Seat, meld: Meld },
-    Win { seat: Seat, source: WinSource },
+    Deal {
+        seat: Seat,
+        tiles: TileCounts,
+    },
+    Bonus {
+        seat: Seat,
+        bonus: Bonus,
+    },
+    Draw {
+        seat: Seat,
+        tile: Tile,
+    },
+    Discard {
+        seat: Seat,
+        tile: Tile,
+    },
+    Claim {
+        seat: Seat,
+        from: Seat,
+        meld: Meld,
+    },
+    Kong {
+        seat: Seat,
+        meld: Meld,
+    },
+    /// `tile` completed the hand, drawn or claimed.
+    Win {
+        seat: Seat,
+        source: WinSource,
+        tile: Tile,
+    },
     Exhausted,
 }
 

@@ -114,10 +114,17 @@ impl Game {
         let chosen = |wanted: fn(Action) -> bool| from.others().find(|s| self.decisions[s.index()].is_some_and(wanted));
         if let Some(winner) = chosen(|a| a == Action::Win) {
             self.hands[winner.index()].add_tile(tile);
-            if offer == Offer::Discard {
-                self.mark_last_discard_claimed();
+            match offer {
+                Offer::Discard => self.mark_last_discard_claimed(),
+                Offer::KongUpgrade => {
+                    // Robbed: the tile leaves the kong owner's hand face up.
+                    self.hands[from.index()].discard(tile).expect("upgrade tile is held");
+                    self.public.add(tile);
+                },
             }
-            self.end_with_win(winner, WinSource::Discard(from));
+            self.end_with_win(winner, WinSource::Discard(from), tile);
+        } else if offer == Offer::KongUpgrade {
+            self.complete_upgrade(from, tile);
         } else if let Some(seat) = chosen(|a| a == Action::Kong) {
             let meld = self.hands[seat.index()].claim_kong(tile).expect("kong was legal");
             self.after_meld_claim(seat, meld, tile);
@@ -160,13 +167,14 @@ impl Game {
         &mut self,
         winner: Seat,
         source: WinSource,
+        tile: Tile,
     ) {
         let win = Win {
             winner,
             source,
             bonus_tiles: self.hand(winner).bonus().len(),
         };
-        self.events.push(Event::Win { seat: winner, source });
+        self.events.push(Event::Win { seat: winner, source, tile });
         let result = HandResult { win: Some(win), kongs: self.kongs() };
         self.end(result);
     }

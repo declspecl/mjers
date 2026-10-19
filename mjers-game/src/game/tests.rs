@@ -354,3 +354,61 @@ fn events_tell_the_story() {
     let deal = events.iter().find(|e| matches!(e, crate::Event::Deal { .. })).unwrap();
     assert!(serde_json::to_string(deal).unwrap().contains("\"event\":\"deal\""));
 }
+
+/// Seat 1 pongs 5p, later draws the fourth 5p and adds it to the pong while
+/// seat 2 waits on 5p.
+fn upgrade_with_robber_waiting(rules: Ruleset) -> Game {
+    let hands = ["123456789m1234z", "9m55p123789s1112z", "46p456s99m666777z", "12345678m33445z"];
+    let wall = crate::testing::stacked(S[0], hands, "5p1s2s3s5p", "8p");
+    let mut game = Game::from_wall(Arc::new(rules), wall, S[0]);
+    game.apply(S[0], Action::Discard(tile("5p"))).unwrap();
+    game.apply(S[2], Action::Pass).unwrap();
+    game.apply(S[1], Action::Pong).unwrap();
+    for (seat, discard) in [(S[1], "2z"), (S[2], "1s"), (S[3], "2s"), (S[0], "3s")] {
+        game.apply(seat, Action::Discard(tile(discard))).unwrap();
+        pass_claims(&mut game);
+    }
+    assert_eq!(game.last_draw(), Some(tile("5p")));
+    game.apply(S[1], Action::UpgradeKong(tile("5p"))).unwrap();
+    game
+}
+
+#[test]
+fn family_rules_never_offer_the_kong_tile() {
+    let game = upgrade_with_robber_waiting(Ruleset::family());
+    assert_eq!(game.phase(), &Phase::Turn { seat: S[1], after_claim: false });
+    assert_eq!(game.last_draw(), Some(tile("8p")));
+}
+
+#[test]
+fn robbing_the_kong_wins_off_the_kong_owner() {
+    let mut game = upgrade_with_robber_waiting(Ruleset {
+        allow_rob_kong: true,
+        ..Ruleset::family()
+    });
+    assert_eq!(
+        game.phase(),
+        &Phase::Claim {
+            tile: tile("5p"),
+            from: S[1],
+            offer: crate::Offer::KongUpgrade
+        }
+    );
+    assert_eq!(game.legal_actions(S[2]), [Action::Win, Action::Pass]);
+    game.apply(S[2], Action::Win).unwrap();
+    let win = game.result().unwrap().win.unwrap();
+    assert_eq!((win.winner, win.source), (S[2], WinSource::Discard(S[1])));
+    assert_eq!(game.hand(S[1]).melds().collect::<Vec<_>>(), [Meld::Pong(tile("5p"))], "the kong never formed");
+    assert!(game.result().unwrap().kongs.is_empty());
+}
+
+#[test]
+fn declined_rob_completes_the_kong() {
+    let mut game = upgrade_with_robber_waiting(Ruleset {
+        allow_rob_kong: true,
+        ..Ruleset::family()
+    });
+    game.apply(S[2], Action::Pass).unwrap();
+    assert_eq!(game.hand(S[1]).melds().collect::<Vec<_>>(), [Meld::Kong(tile("5p"), KongKind::Exposed)]);
+    assert_eq!(game.last_draw(), Some(tile("8p")));
+}

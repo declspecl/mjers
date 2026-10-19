@@ -198,7 +198,10 @@ impl Game {
         self.steps.push(Step { seat, action });
         match action {
             Action::Discard(tile) => self.discard(seat, tile),
-            Action::SelfDrawWin => self.end_with_win(seat, WinSource::SelfDraw),
+            Action::SelfDrawWin => {
+                let tile = self.last_draw.expect("self-draw wins follow a draw");
+                self.end_with_win(seat, WinSource::SelfDraw, tile);
+            },
             Action::ConcealedKong(tile) => {
                 let meld = self.hands[seat.index()].declare_concealed_kong(tile).expect("kong was legal");
                 self.events.push(Event::Kong { seat, meld });
@@ -207,15 +210,22 @@ impl Game {
                 }
                 self.start_turn(seat, true);
             },
-            Action::UpgradeKong(tile) => {
-                let meld = self.hands[seat.index()].upgrade_kong(tile).expect("upgrade was legal");
-                self.events.push(Event::Kong { seat, meld });
-                self.public.add(tile);
-                self.start_turn(seat, true);
-            },
+            Action::UpgradeKong(tile) if self.rules.allow_rob_kong => self.open_claims(tile, seat, Offer::KongUpgrade),
+            Action::UpgradeKong(tile) => self.complete_upgrade(seat, tile),
             Action::Pass | Action::Chow(_) | Action::Pong | Action::Kong | Action::Win => self.decide(seat, action),
         }
         Ok(())
+    }
+
+    fn complete_upgrade(
+        &mut self,
+        seat: Seat,
+        tile: Tile,
+    ) {
+        let meld = self.hands[seat.index()].upgrade_kong(tile).expect("upgrade was legal");
+        self.events.push(Event::Kong { seat, meld });
+        self.public.add(tile);
+        self.start_turn(seat, true);
     }
 
     fn discard(
