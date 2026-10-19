@@ -10,6 +10,8 @@ mjers-tile.workspace = true
 mjers-hand.workspace = true
 mjers-game.workspace = true
 mjers-bot.workspace = true
+mjers-rules.workspace = true
+serde.workspace = true
 
 [lints]
 workspace = true

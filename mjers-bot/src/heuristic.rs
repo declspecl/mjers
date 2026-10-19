@@ -243,7 +243,7 @@ impl Policy for HeuristicBot {
 }
 
 /// The hand after a turn-time kong declaration, before its replacement draw.
-pub(crate) fn after_kong(
+pub fn after_kong(
     hand: &Hand,
     action: Action,
 ) -> Option<Hand> {
@@ -257,7 +257,7 @@ pub(crate) fn after_kong(
 }
 
 /// Shanten after the best discard from a hand awaiting discard.
-pub(crate) fn best_discard_shanten(hand: &Hand) -> i8 {
+pub fn best_discard_shanten(hand: &Hand) -> i8 {
     hand.concealed()
         .kinds()
         .map(|t| {
@@ -289,7 +289,7 @@ pub(crate) fn connectivity(
 }
 
 /// The hand right after claiming `tile` (before discarding or replacing).
-pub(crate) fn after_claim(
+pub fn after_claim(
     hand: &Hand,
     tile: Tile,
     action: Action,

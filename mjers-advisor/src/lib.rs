@@ -1,1 +1,8 @@
-//! action ranking with explanations
+//! Action ranking with explanations.
+
+pub mod heuristic;
+
+pub use heuristic::{
+    Assessment,
+    rank,
+};
