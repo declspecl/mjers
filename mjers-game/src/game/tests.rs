@@ -1,6 +1,9 @@
 use mjers_tile::Bonus;
 
-use mjers_hand::Meld;
+use mjers_hand::{
+    KongKind,
+    Meld,
+};
 use mjers_rules::WinSource;
 
 use super::*;
@@ -191,4 +194,64 @@ fn only_the_next_seat_may_chow_in_any_position() {
     game.apply(S[1], Action::Chow(tile("2p"))).unwrap();
     assert_eq!(game.hand(S[1]).melds().collect::<Vec<_>>(), [Meld::Chow(tile("2p"))]);
     assert_eq!(game.public_tiles().to_string(), "234p");
+}
+
+/// Passes every open claim window.
+fn pass_claims(game: &mut Game) {
+    while let Phase::Claim { .. } = game.phase() {
+        let seat = game.to_act()[0];
+        game.apply(seat, Action::Pass).unwrap();
+    }
+}
+
+#[test]
+fn concealed_kong_draws_a_replacement() {
+    let hands = ["1111m56789m1234z", "123456789p1234z", "123456789s1234z", "23456789m55667z"];
+    let mut game = game(hands, "7z", "7p");
+    assert!(game.legal_actions(S[0]).contains(&Action::ConcealedKong(tile("1m"))));
+    game.apply(S[0], Action::ConcealedKong(tile("1m"))).unwrap();
+    assert_eq!(game.hand(S[0]).melds().collect::<Vec<_>>(), [Meld::Kong(tile("1m"), KongKind::Concealed)]);
+    assert_eq!(game.phase(), &Phase::Turn { seat: S[0], after_claim: false });
+    assert_eq!(game.last_draw(), Some(tile("7p")));
+    assert_eq!(game.hand(S[0]).size(), DEALT_TILES + 1);
+    assert_eq!(game.public_tiles().to_string(), "1111m");
+}
+
+#[test]
+fn exposed_kong_from_a_discard() {
+    let hands = ["123456789m1234z", "123456789p1234z", "123478999s5566z", "123456789m5677z"];
+    let mut game = game(hands, "9s", "1p");
+    game.apply(S[0], Action::Discard(tile("9s"))).unwrap();
+    assert_eq!(game.legal_actions(S[2]), [Action::Pong, Action::Kong, Action::Pass]);
+    game.apply(S[2], Action::Kong).unwrap();
+    assert_eq!(game.hand(S[2]).melds().collect::<Vec<_>>(), [Meld::Kong(tile("9s"), KongKind::Exposed)]);
+    assert_eq!(game.phase(), &Phase::Turn { seat: S[2], after_claim: false });
+    assert_eq!(game.last_draw(), Some(tile("1p")));
+    assert_eq!(game.public_tiles().to_string(), "9999s");
+}
+
+#[test]
+fn pong_upgrades_when_the_fourth_tile_is_drawn() {
+    let hands = ["123456789m1234z", "123456789p1255z", "123456789s1234z", "123456789m3467z"];
+    let mut game = game(hands, "5z1s2s3s5z", "6p");
+    game.apply(S[0], Action::Discard(tile("5z"))).unwrap();
+    game.apply(S[1], Action::Pong).unwrap();
+    for (seat, discard) in [(S[1], "1z"), (S[2], "1s"), (S[3], "2s"), (S[0], "3s")] {
+        game.apply(seat, Action::Discard(tile(discard))).unwrap();
+        pass_claims(&mut game);
+    }
+    assert_eq!(game.last_draw(), Some(tile("5z")));
+    assert!(game.legal_actions(S[1]).contains(&Action::UpgradeKong(tile("5z"))));
+    game.apply(S[1], Action::UpgradeKong(tile("5z"))).unwrap();
+    assert_eq!(game.hand(S[1]).melds().collect::<Vec<_>>(), [Meld::Kong(tile("5z"), KongKind::Exposed)]);
+    assert_eq!(game.last_draw(), Some(tile("6p")));
+}
+
+#[test]
+fn no_kong_declarations_right_after_a_claim() {
+    let hands = ["123456789m1234z", "123456789p1255z", "123456789s1234z", "123456789m3467z"];
+    let mut game = game(hands, "5z", "");
+    game.apply(S[0], Action::Discard(tile("5z"))).unwrap();
+    game.apply(S[1], Action::Pong).unwrap();
+    assert!(game.legal_actions(S[1]).iter().all(|a| matches!(a, Action::Discard(_))));
 }

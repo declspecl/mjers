@@ -76,6 +76,9 @@ impl Game {
         if held >= 2 {
             options.push(Action::Pong);
         }
+        if held == 3 && self.wall.remaining() > 0 {
+            options.push(Action::Kong);
+        }
         if seat.previous() == from {
             options.extend(
                 chow_starts(tile)
@@ -114,6 +117,10 @@ impl Game {
                 self.mark_last_discard_claimed();
             }
             self.end_with_win(winner, WinSource::Discard(from));
+        } else if let Some(seat) = chosen(|a| a == Action::Kong) {
+            let meld = self.hands[seat.index()].claim_kong(tile).expect("kong was legal");
+            self.after_meld_claim(seat, meld, tile);
+            self.start_turn(seat, true);
         } else if let Some(seat) = chosen(|a| a == Action::Pong) {
             let meld = self.hands[seat.index()].claim_pong(tile).expect("pong was legal");
             self.after_meld_claim(seat, meld, tile);

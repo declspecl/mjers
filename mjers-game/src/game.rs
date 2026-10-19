@@ -6,13 +6,18 @@ mod tests;
 
 use std::sync::Arc;
 
-use mjers_hand::Hand;
+use mjers_hand::hand::MAX_MELDS;
+use mjers_hand::{
+    Hand,
+    Meld,
+};
 use mjers_rules::{
     HandResult,
     Ruleset,
     SEATS,
     Seat,
 };
+use mjers_tile::counts::COPIES;
 use mjers_tile::{
     Tile,
     TileCounts,
@@ -123,9 +128,24 @@ impl Game {
         seat: Seat,
     ) -> Vec<Action> {
         match &self.phase {
-            Phase::Turn { seat: current, .. } if *current == seat => {
+            Phase::Turn { seat: current, after_claim } if *current == seat => {
                 let hand = self.hand(seat);
-                hand.concealed().kinds().map(Action::Discard).collect()
+                let mut actions = Vec::new();
+                if !after_claim {
+                    let can_replace = self.wall.remaining() > 0;
+                    let concealed = hand.concealed();
+                    if can_replace && hand.meld_count() < MAX_MELDS {
+                        actions.extend(concealed.kinds().filter(|&t| concealed.get(t) == COPIES).map(Action::ConcealedKong));
+                    }
+                    if can_replace {
+                        actions.extend(hand.melds().filter_map(|m| match m {
+                            Meld::Pong(t) if concealed.get(t) > 0 => Some(Action::UpgradeKong(t)),
+                            _ => None,
+                        }));
+                    }
+                }
+                actions.extend(hand.concealed().kinds().map(Action::Discard));
+                actions
             },
             Phase::Claim { .. } => self.claim_actions(seat),
             _ => Vec::new(),
@@ -148,6 +168,18 @@ impl Game {
         }
         match action {
             Action::Discard(tile) => self.discard(seat, tile),
+            Action::ConcealedKong(tile) => {
+                self.hands[seat.index()].declare_concealed_kong(tile).expect("kong was legal");
+                for _ in 0..COPIES {
+                    self.public.add(tile);
+                }
+                self.start_turn(seat, true);
+            },
+            Action::UpgradeKong(tile) => {
+                self.hands[seat.index()].upgrade_kong(tile).expect("upgrade was legal");
+                self.public.add(tile);
+                self.start_turn(seat, true);
+            },
             Action::Pass | Action::Chow(_) | Action::Pong | Action::Kong | Action::Win => self.decide(seat, action),
             _ => unreachable!("not offered: {action}"),
         }
