@@ -271,7 +271,7 @@ pub fn best_discard_shanten(hand: &Hand) -> i8 {
 
 /// How many held tiles could combine with `tile`: copies and suit neighbours
 /// within two ranks.
-pub(crate) fn connectivity(
+pub fn connectivity(
     concealed: &TileCounts,
     tile: Tile,
 ) -> u8 {

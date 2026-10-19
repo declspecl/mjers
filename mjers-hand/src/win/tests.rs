@@ -75,3 +75,21 @@ fn hand_level_queries_include_melds() {
     won.add_tile("2z".parse().unwrap());
     assert!(won.is_winning());
 }
+
+#[test]
+fn decompose_finds_eye_and_sets() {
+    let (eye, sets) = decompose(&"123m456p789s11122z".parse().unwrap(), 0).unwrap();
+    assert_eq!(eye.to_string(), "2z");
+    assert_eq!(sets.len(), 4);
+    assert_eq!(sets.iter().filter(|m| matches!(m, Meld::Chow(_))).count(), 3);
+    let hand: TileCounts = "11122233344455m".parse().unwrap();
+    let (eye, sets) = decompose(&hand, 0).unwrap();
+    let mut rebuilt = TileCounts::new().with(eye).with(eye);
+    for tile in sets.iter().flat_map(|m| m.tiles().tiles().collect::<Vec<_>>()) {
+        rebuilt.add(tile);
+    }
+    assert_eq!(rebuilt, hand);
+    let (_, with_melds) = decompose(&"345s11z".parse().unwrap(), 3).unwrap();
+    assert_eq!(with_melds, [Meld::Chow("3s".parse().unwrap())]);
+    assert!(decompose(&"123m456p789s11123z".parse().unwrap(), 0).is_none());
+}

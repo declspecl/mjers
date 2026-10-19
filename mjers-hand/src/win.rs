@@ -20,6 +20,7 @@ use crate::hand::{
     Hand,
     MAX_MELDS,
 };
+use crate::meld::Meld;
 
 /// Whether `concealed` forms the remaining sets plus an eye beside `melds`
 /// declared melds.
@@ -47,6 +48,48 @@ pub fn waits(
     melds: usize,
 ) -> Vec<Tile> {
     Tile::all().filter(|&t| concealed.get(t) < COPIES && is_complete(&concealed.with(t), melds)).collect()
+}
+
+/// One way to split a complete hand's concealed tiles: the eye and the sets.
+///
+/// Where several splits exist, the lowest workable eye is chosen, then
+/// pongs are preferred (111222333 splits as three pongs).
+pub fn decompose(
+    concealed: &TileCounts,
+    melds: usize,
+) -> Option<(Tile, Vec<Meld>)> {
+    if melds > MAX_MELDS || concealed.len() != 3 * (MAX_MELDS - melds) + 2 {
+        return None;
+    }
+    concealed.kinds().filter(|&t| concealed.get(t) >= 2).find_map(|eye| {
+        let mut rest = *concealed.as_array();
+        rest[eye.index()] -= 2;
+        collect_sets(&mut rest).map(|sets| (eye, sets))
+    })
+}
+
+/// The pong-first greedy split of `counts` into sets, if one exists.
+fn collect_sets(counts: &mut [u8; KINDS]) -> Option<Vec<Meld>> {
+    let mut sets = Vec::new();
+    for i in 0..KINDS {
+        let tile = Tile::from_index(i).expect("in range");
+        if counts[i] >= 3 {
+            counts[i] -= 3;
+            sets.push(Meld::Pong(tile));
+        }
+        let n = counts[i];
+        if n == 0 {
+            continue;
+        }
+        if !(i < SUITED_KINDS && i % 9 <= 6 && counts[i + 1] >= n && counts[i + 2] >= n) {
+            return None;
+        }
+        counts[i] = 0;
+        counts[i + 1] -= n;
+        counts[i + 2] -= n;
+        sets.extend(std::iter::repeat_n(Meld::Chow(tile), n as usize));
+    }
+    Some(sets)
 }
 
 /// Whether `tiles` form exactly `sets` sets with no eye.

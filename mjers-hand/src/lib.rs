@@ -24,6 +24,7 @@ pub use ukeire::{
 };
 pub use wait::WaitShape;
 pub use win::{
+    decompose,
     is_complete,
     waits,
 };
