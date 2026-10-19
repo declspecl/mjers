@@ -1,8 +1,13 @@
 //! Batch simulation, comparison, and reports.
 
+pub mod compare;
 pub mod runner;
 pub mod stats;
 
+pub use compare::{
+    Comparison,
+    compare,
+};
 pub use runner::{
     Seeds,
     Table,
