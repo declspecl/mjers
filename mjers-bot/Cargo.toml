@@ -9,6 +9,7 @@ license.workspace = true
 mjers-tile.workspace = true
 mjers-hand.workspace = true
 mjers-game.workspace = true
+mjers-rules.workspace = true
 
 [lints]
 workspace = true

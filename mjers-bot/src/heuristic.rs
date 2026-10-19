@@ -9,6 +9,7 @@ use mjers_game::{
     Observation,
 };
 use mjers_hand::{
+    DiscardOption,
     Hand,
     shanten,
 };
@@ -18,6 +19,7 @@ use mjers_tile::{
     TileCounts,
 };
 
+use crate::defense;
 use crate::policy::Policy;
 
 /// Plays for speed: minimise shanten, then maximise live improving tiles.
@@ -149,4 +151,67 @@ pub(crate) fn after_claim(
         _ => return None,
     };
     Some(after)
+}
+
+/// Efficiency play that weighs each discard's danger, and folds (discards
+/// the safest tile) when far from ready while an opponent looks ready.
+pub struct DefensiveBot {
+    /// Weight of danger against lost efficiency.
+    pub caution: f64,
+    /// Fold at this shanten or worse...
+    pub fold_shanten: i8,
+    /// ...when some opponent's readiness reaches this.
+    pub fold_readiness: f64,
+}
+
+impl Default for DefensiveBot {
+    fn default() -> Self {
+        DefensiveBot {
+            caution: 1.0,
+            fold_shanten: 2,
+            fold_readiness: 0.5,
+        }
+    }
+}
+
+impl Policy for DefensiveBot {
+    fn name(&self) -> &str {
+        "defensive"
+    }
+
+    fn act(
+        &mut self,
+        obs: &Observation<'_>,
+        legal: &[Action],
+    ) -> Action {
+        let efficient = EfficiencyBot.act(obs, legal);
+        let Action::Discard(_) = efficient else {
+            return efficient;
+        };
+        Action::Discard(self.safest_reasonable_discard(obs))
+    }
+}
+
+impl DefensiveBot {
+    fn safest_reasonable_discard(
+        &self,
+        obs: &Observation<'_>,
+    ) -> Tile {
+        let hand = obs.hand();
+        let options = hand.discard_options(obs.public_tiles());
+        let unseen = defense::unseen(obs);
+        let threat = obs.seat().others().map(|o| defense::readiness(obs, o)).fold(0.0, f64::max);
+        let best = &options[0].ukeire;
+        let folding = best.shanten >= self.fold_shanten && threat >= self.fold_readiness;
+        let score = |o: &DiscardOption| {
+            let danger = defense::danger(obs, o.tile, &unseen);
+            if folding {
+                return danger;
+            }
+            let slower = (o.ukeire.shanten - best.shanten) as f64;
+            let fewer = (best.total() as f64 - o.ukeire.total() as f64) / best.total().max(1) as f64;
+            slower + 0.3 * fewer + self.caution * danger
+        };
+        options.iter().min_by(|a, b| score(a).total_cmp(&score(b))).expect("a hand awaiting discard holds tiles").tile
+    }
 }

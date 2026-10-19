@@ -80,3 +80,26 @@ fn efficiency_beats_random_play() {
     }
     assert!(efficiency_total > 300, "efficiency bot won {efficiency_total} units over 300 hands");
 }
+
+/// Deal-ins by seat 0 over `hands` hands, with seat 0 using `bot`.
+fn deal_ins(
+    hands: u64,
+    bot: impl Fn() -> Box<dyn Policy>,
+) -> usize {
+    let rules = Arc::new(Ruleset::family());
+    (0..hands)
+        .filter(|&seed| {
+            let mut game = Game::new(rules.clone(), seed, Seat::ALL[(seed % 4) as usize]);
+            let mut table: [Box<dyn Policy>; 4] = std::array::from_fn(|i| if i == 0 { bot() } else { Box::new(EfficiencyBot) as Box<dyn Policy> });
+            play_out(&mut game, &mut table);
+            game.result().unwrap().win.is_some_and(|w| w.source == mjers_rules::WinSource::Discard(Seat::ALL[0]))
+        })
+        .count()
+}
+
+#[test]
+fn defensive_bot_deals_in_less() {
+    let efficient = deal_ins(300, || Box::new(EfficiencyBot));
+    let defensive = deal_ins(300, || Box::new(DefensiveBot::default()));
+    assert!(defensive < efficient, "defensive {defensive} vs efficient {efficient} deal-ins");
+}

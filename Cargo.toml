@@ -54,3 +54,7 @@ workspace = true
 
 [profile.release]
 debug = 1
+
+# Hand analysis dominates bot play; optimise it even in dev and test builds.
+[profile.dev.package.mjers-hand]
+opt-level = 3
