@@ -1,0 +1,14 @@
+[package]
+name = "mjers-game"
+description = "deterministic game state machine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-tile.workspace = true
+mjers-hand.workspace = true
+mjers-rules.workspace = true
+
+[lints]
+workspace = true

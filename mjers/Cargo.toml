@@ -1,0 +1,17 @@
+[package]
+name = "mjers"
+description = "facade re-exporting the mjers crates"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-tile.workspace = true
+mjers-hand.workspace = true
+mjers-rules.workspace = true
+mjers-game.workspace = true
+mjers-bot.workspace = true
+mjers-advisor.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "mjers-advisor"
+description = "action ranking with explanations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-tile.workspace = true
+mjers-hand.workspace = true
+mjers-game.workspace = true
+mjers-bot.workspace = true
+
+[lints]
+workspace = true

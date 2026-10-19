@@ -1,6 +1,54 @@
-[package]
-name = "mjers"
+[workspace]
+resolver = "3"
+members = [
+    "mjers",
+    "mjers-tile",
+    "mjers-hand",
+    "mjers-rules",
+    "mjers-game",
+    "mjers-bot",
+    "mjers-advisor",
+    "mjers-sim",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+mjers = { path = "mjers" }
+mjers-tile = { path = "mjers-tile" }
+mjers-hand = { path = "mjers-hand" }
+mjers-rules = { path = "mjers-rules" }
+mjers-game = { path = "mjers-game" }
+mjers-bot = { path = "mjers-bot" }
+mjers-advisor = { path = "mjers-advisor" }
+mjers-sim = { path = "mjers-sim" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[package]
+name = "mjers-cli"
+description = "command-line interface for the mjers mahjong engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+default-run = "mj"
+
+[[bin]]
+name = "mj"
+path = "src/main.rs"
 
 [dependencies]
+mjers.workspace = true
+
+[lints]
+workspace = true
+
+[profile.release]
+debug = 1

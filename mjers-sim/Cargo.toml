@@ -1,0 +1,14 @@
+[package]
+name = "mjers-sim"
+description = "batch simulation, comparison, and reports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-rules.workspace = true
+mjers-game.workspace = true
+mjers-bot.workspace = true
+
+[lints]
+workspace = true
