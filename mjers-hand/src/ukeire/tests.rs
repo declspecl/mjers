@@ -5,7 +5,7 @@ fn counts(notation: &str) -> TileCounts {
 }
 
 fn tiles(ukeire: &Ukeire) -> String {
-    ukeire.improvements.iter().map(|i| i.tile).collect::<TileCounts>().to_string()
+    ukeire.improvements().map(|i| i.tile).collect::<TileCounts>().to_string()
 }
 
 #[test]

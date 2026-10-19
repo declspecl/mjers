@@ -2,6 +2,10 @@
 
 use std::collections::HashSet;
 
+use mjers_hand::ukeire::{
+    discard_options,
+    ukeire,
+};
 use mjers_hand::{
     is_complete,
     shanten,
@@ -171,5 +175,31 @@ proptest! {
     fn shanten_matches_swap_distance(counts in small_hands(7)) {
         let hand = to_counts(&counts);
         prop_assert_eq!(shanten(&hand, 2), reference_shanten(counts, 2), "{}", hand);
+    }
+
+    #[test]
+    fn ukeire_matches_its_definition(counts in any_tiles(13), seen in any_tiles(10)) {
+        let hand = to_counts(&counts);
+        let visible: TileCounts = Tile::all()
+            .flat_map(|t| std::iter::repeat_n(t, seen[t.index()].min(4 - counts[t.index()].min(4)) as usize))
+            .collect();
+        let fast = ukeire(&hand, 0, &visible);
+        let base = shanten(&hand, 0);
+        prop_assert_eq!(fast.shanten, base);
+        for tile in Tile::all() {
+            let live = 4u8.saturating_sub(hand.get(tile) + visible.get(tile));
+            let improves = live > 0 && shanten(&hand.with(tile), 0) < base;
+            prop_assert_eq!(fast.live_by_tile[tile.index()], if improves { live } else { 0 }, "{} + {}", hand, tile);
+        }
+    }
+
+    #[test]
+    fn discard_options_match_per_discard_ukeire(counts in any_tiles(14)) {
+        let hand = to_counts(&counts);
+        for option in discard_options(&hand, 0, &TileCounts::new()) {
+            let mut after = hand;
+            after.remove(option.tile);
+            prop_assert_eq!(option.ukeire, ukeire(&after, 0, &TileCounts::new().with(option.tile)), "{} - {}", hand, option.tile);
+        }
     }
 }

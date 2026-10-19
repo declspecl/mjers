@@ -517,6 +517,7 @@ dependencies = [
 name = "mjers-advisor"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "mjers-bot",
  "mjers-game",
  "mjers-hand",
@@ -529,6 +530,7 @@ dependencies = [
 name = "mjers-bot"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "mjers-game",
  "mjers-hand",
  "mjers-rules",
@@ -553,6 +555,7 @@ dependencies = [
 name = "mjers-game"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "mjers-hand",
  "mjers-rules",
  "mjers-tile",

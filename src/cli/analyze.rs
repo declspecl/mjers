@@ -52,5 +52,5 @@ fn print_ukeire(ukeire: &Ukeire) {
 }
 
 fn improving(ukeire: &Ukeire) -> String {
-    ukeire.improvements.iter().map(|i| format!("{}×{}", i.tile, i.live)).collect::<Vec<_>>().join(" ")
+    ukeire.improvements().map(|i| format!("{}×{}", i.tile, i.live)).collect::<Vec<_>>().join(" ")
 }

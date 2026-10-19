@@ -166,7 +166,7 @@ fn describe(
     before: &Hand,
     after: &Hand,
 ) -> String {
-    let tiles: Vec<String> = ukeire.improvements.iter().map(|i| format!("{}×{}", i.tile, i.live)).collect();
+    let tiles: Vec<String> = ukeire.improvements().map(|i| format!("{}×{}", i.tile, i.live)).collect();
     let state = match ukeire.shanten {
         -1 => return "complete".to_string(),
         0 => format!("ready, waiting on {} ({} live)", tiles.join(" "), ukeire.total()),

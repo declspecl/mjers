@@ -13,7 +13,12 @@ mjers-game.workspace = true
 mjers-rules.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 serde_json.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "bots"
+harness = false
