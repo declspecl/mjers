@@ -4,6 +4,7 @@ pub mod action;
 pub mod game;
 pub mod matches;
 pub mod observation;
+pub mod position;
 pub mod rng;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -32,6 +33,10 @@ pub use mjers_rules::{
 pub use observation::{
     Decision,
     Observation,
+};
+pub use position::{
+    Position,
+    ResumePoint,
 };
 pub use rng::Rng;
 pub use trace::{

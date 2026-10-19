@@ -69,6 +69,24 @@ impl Wall {
         }
     }
 
+    /// A partly drawn wall holding exactly `tiles`, drawn from the front.
+    pub fn from_remaining(
+        tiles: &[WallTile],
+        reserved: usize,
+    ) -> Wall {
+        assert!(tiles.len() <= WALL_SIZE);
+        let front = WALL_SIZE - tiles.len();
+        let filler = tiles.first().copied().unwrap_or(WallTile::Tile(Tile::from_index(0).expect("tile 0")));
+        let mut all = [filler; WALL_SIZE];
+        all[front..].copy_from_slice(tiles);
+        Wall {
+            tiles: all,
+            front: front as u8,
+            back: WALL_SIZE as u8,
+            reserved: reserved as u8,
+        }
+    }
+
     pub const fn remaining(&self) -> usize {
         (self.back - self.front) as usize
     }

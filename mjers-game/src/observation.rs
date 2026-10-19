@@ -106,6 +106,11 @@ impl<'a> Observation<'a> {
         self.game.public_tiles()
     }
 
+    /// Tiles physically left in the wall, flower wall included.
+    pub fn wall_remaining(&self) -> usize {
+        self.game.wall().remaining()
+    }
+
     /// Normal draws left before the hand ends with no winner.
     pub fn live_wall(&self) -> usize {
         self.game.wall().live_remaining()

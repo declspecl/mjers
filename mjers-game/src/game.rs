@@ -109,22 +109,8 @@ impl Game {
                 }
             }
         }
-        let mut game = Game {
-            rules,
-            wall,
-            hands: [Hand::new(TileCounts::new()); SEATS],
-            dealer,
-            phase: Phase::Turn { seat: dealer, after_claim: false },
-            discards: Vec::new(),
-            public: TileCounts::new(),
-            last_draw: None,
-            asked: [false; SEATS],
-            decisions: [None; SEATS],
-            seed: None,
-            initial_wall,
-            steps: Vec::new(),
-            events: Vec::new(),
-        };
+        let mut game = Game::from_parts(rules, wall, [Hand::new(TileCounts::new()); SEATS], dealer, Vec::new(), TileCounts::new());
+        game.initial_wall = initial_wall;
         for &seat in &order {
             for tile in std::mem::take(&mut dealt[seat.index()]) {
                 if game.receive(seat, tile).is_none() {
@@ -138,6 +124,52 @@ impl Game {
         }
         game.start_turn(dealer, false);
         game
+    }
+
+    /// A game around existing state, waiting at the dealer's turn until told otherwise.
+    pub(crate) fn from_parts(
+        rules: Arc<Ruleset>,
+        wall: Wall,
+        hands: [Hand; SEATS],
+        dealer: Seat,
+        discards: Vec<Discard>,
+        public: TileCounts,
+    ) -> Game {
+        Game {
+            rules,
+            initial_wall: Arc::new(wall.clone()),
+            wall,
+            hands,
+            dealer,
+            phase: Phase::Turn { seat: dealer, after_claim: false },
+            discards,
+            public,
+            last_draw: None,
+            asked: [false; SEATS],
+            decisions: [None; SEATS],
+            seed: None,
+            steps: Vec::new(),
+            events: Vec::new(),
+        }
+    }
+
+    pub(crate) fn set_turn(
+        &mut self,
+        seat: Seat,
+        after_claim: bool,
+        last_draw: Option<Tile>,
+    ) {
+        self.phase = Phase::Turn { seat, after_claim };
+        self.last_draw = last_draw;
+    }
+
+    pub(crate) fn reopen_claims(
+        &mut self,
+        tile: Tile,
+        from: Seat,
+        offer: Offer,
+    ) {
+        self.open_claims(tile, from, offer);
     }
 
     /// Seats that must decide before play continues.
