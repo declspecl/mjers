@@ -2,6 +2,7 @@
 
 pub mod action;
 pub mod game;
+pub mod matches;
 pub mod observation;
 pub mod rng;
 #[cfg(test)]
@@ -18,6 +19,10 @@ pub use action::{
 pub use game::{
     Discard,
     Game,
+};
+pub use matches::{
+    HandRecord,
+    Match,
 };
 pub use mjers_rules::{
     HandResult,
