@@ -583,7 +583,12 @@ version = "0.1.0"
 dependencies = [
  "mjers-bot",
  "mjers-game",
+ "mjers-hand",
  "mjers-rules",
+ "mjers-tile",
+ "rayon",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

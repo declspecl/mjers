@@ -6,9 +6,16 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+mjers-tile.workspace = true
+mjers-hand.workspace = true
 mjers-rules.workspace = true
 mjers-game.workspace = true
 mjers-bot.workspace = true
+rayon.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true
