@@ -1,6 +1,10 @@
 use mjers_tile::Bonus;
 
 use super::*;
+use crate::action::{
+    Action,
+    GameError,
+};
 use crate::testing::*;
 use crate::wall::WALL_SIZE;
 
@@ -13,7 +17,7 @@ fn tiles_accounted_for(game: &Game) -> usize {
 fn deal_gives_dealer_fourteen() {
     for seed in 0..50 {
         let game = Game::new(family(), seed, S[2]);
-        assert_eq!(game.turn(), S[2]);
+        assert_eq!(game.to_act(), [S[2]]);
         for seat in S {
             let expected = if seat == S[2] { DEALT_TILES + 1 } else { DEALT_TILES };
             assert_eq!(game.hand(seat).size(), expected, "seed {seed} {seat}");
@@ -57,4 +61,48 @@ fn drawn_flowers_chain_replacements() {
     assert_eq!(game.hand(S[0]).bonus().len(), 2);
     assert_eq!(game.last_draw(), Some(tile("7z")));
     assert_eq!(game.hand(S[0]).size(), DEALT_TILES + 1);
+}
+
+const PLAIN: [&str; 4] = ["123456789m1234z", "123456789p1234z", "123456789s1234z", "111222333444m5z"];
+
+#[test]
+fn discard_passes_the_turn_with_a_draw() {
+    let mut game = game(PLAIN, "7z6z", "");
+    game.apply(S[0], Action::Discard(tile("7z"))).unwrap();
+    assert_eq!(game.to_act(), [S[1]]);
+    assert_eq!(game.last_draw(), Some(tile("6z")));
+    assert_eq!(
+        game.discards(),
+        [Discard {
+            seat: S[0],
+            tile: tile("7z"),
+            claimed: false
+        }]
+    );
+    assert_eq!(game.public_tiles().to_string(), "7z");
+}
+
+#[test]
+fn rejects_out_of_turn_and_unheld_discards() {
+    let mut game = game(PLAIN, "7z", "");
+    assert_eq!(game.apply(S[1], Action::Discard(tile("1p"))), Err(GameError::NotAsked(S[1])));
+    let illegal = Action::Discard(tile("9s"));
+    assert_eq!(game.apply(S[0], illegal), Err(GameError::Illegal { seat: S[0], action: illegal }));
+    assert_eq!(game.to_act(), [S[0]], "rejected actions change nothing");
+}
+
+#[test]
+fn hand_ends_without_winner_when_live_wall_runs_out() {
+    let mut game = Game::new(family(), 3, S[0]);
+    let mut turns = 0;
+    while let Some(&seat) = game.to_act().first() {
+        let tile = game.last_draw().unwrap_or_else(|| game.hand(seat).concealed().kinds().next().unwrap());
+        game.apply(seat, Action::Discard(tile)).unwrap();
+        turns += 1;
+    }
+    assert_eq!(game.result(), Some(&HandResult::default()));
+    assert_eq!(game.wall().live_remaining(), 0);
+    assert_eq!(turns, game.discards().len());
+    assert_eq!(game.apply(S[0], Action::Pass), Err(GameError::HandOver));
+    assert_eq!(tiles_accounted_for(&game) + game.discards().len(), WALL_SIZE);
 }
