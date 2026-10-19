@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "cautious",
+  "params": { "caution": 1.0 }
+}

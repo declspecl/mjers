@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "no-concealed-kong",
+  "params": { "concealed_kong": "never" }
+}

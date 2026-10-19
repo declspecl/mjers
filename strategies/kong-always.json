@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "kong-always",
+  "params": { "exposed_kong": "always", "concealed_kong": "always", "upgrade_kong": "always" }
+}

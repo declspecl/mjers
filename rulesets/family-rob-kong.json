@@ -1,0 +1,14 @@
+{
+  "name": "family-rob-kong",
+  "flower_wall_stacks": 8,
+  "allow_rob_kong": true,
+  "payouts": {
+    "discard_win": 1,
+    "discard_win_discarder": 2,
+    "self_draw_win": 3,
+    "per_bonus": 1,
+    "exposed_kong": 1,
+    "concealed_kong": 2,
+    "kongs_paid_without_winner": true
+  }
+}
