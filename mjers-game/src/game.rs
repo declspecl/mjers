@@ -1,5 +1,6 @@
 //! One hand of mahjong, from the deal to settlement.
 
+mod claims;
 #[cfg(test)]
 mod tests;
 
@@ -20,6 +21,7 @@ use mjers_tile::{
 use crate::action::{
     Action,
     GameError,
+    Offer,
     Phase,
 };
 use crate::rng::Rng;
@@ -50,6 +52,9 @@ pub struct Game {
     public: TileCounts,
     /// The tile drawn this turn, if the turn began with a draw.
     last_draw: Option<Tile>,
+    /// In a claim window: seats with an option, and what each has chosen.
+    asked: [bool; SEATS],
+    decisions: [Option<Action>; SEATS],
 }
 
 impl Game {
@@ -90,6 +95,8 @@ impl Game {
             discards: Vec::new(),
             public: TileCounts::new(),
             last_draw: None,
+            asked: [false; SEATS],
+            decisions: [None; SEATS],
         };
         for &seat in &order {
             for tile in std::mem::take(&mut dealt[seat.index()]) {
@@ -106,7 +113,7 @@ impl Game {
     pub fn to_act(&self) -> Vec<Seat> {
         match &self.phase {
             Phase::Turn { seat, .. } => vec![*seat],
-            Phase::Claim { .. } => Vec::new(),
+            Phase::Claim { .. } => self.undecided_claimants().collect(),
             Phase::Ended(_) => Vec::new(),
         }
     }
@@ -120,6 +127,7 @@ impl Game {
                 let hand = self.hand(seat);
                 hand.concealed().kinds().map(Action::Discard).collect()
             },
+            Phase::Claim { .. } => self.claim_actions(seat),
             _ => Vec::new(),
         }
     }
@@ -140,6 +148,7 @@ impl Game {
         }
         match action {
             Action::Discard(tile) => self.discard(seat, tile),
+            Action::Pass | Action::Chow(_) | Action::Pong | Action::Kong | Action::Win => self.decide(seat, action),
             _ => unreachable!("not offered: {action}"),
         }
         Ok(())
@@ -153,7 +162,7 @@ impl Game {
         self.hands[seat.index()].discard(tile).expect("legal discards are held");
         self.discards.push(Discard { seat, tile, claimed: false });
         self.public.add(tile);
-        self.start_turn(seat.next(), false);
+        self.open_claims(tile, seat, Offer::Discard);
     }
 
     /// Begins `seat`'s turn with a live draw, or a replacement draw after a kong.

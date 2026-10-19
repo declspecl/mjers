@@ -1,5 +1,8 @@
 use mjers_tile::Bonus;
 
+use mjers_hand::Meld;
+use mjers_rules::WinSource;
+
 use super::*;
 use crate::action::{
     Action,
@@ -96,6 +99,10 @@ fn hand_ends_without_winner_when_live_wall_runs_out() {
     let mut game = Game::new(family(), 3, S[0]);
     let mut turns = 0;
     while let Some(&seat) = game.to_act().first() {
+        if game.legal_actions(seat).contains(&Action::Pass) {
+            game.apply(seat, Action::Pass).unwrap();
+            continue;
+        }
         let tile = game.last_draw().unwrap_or_else(|| game.hand(seat).concealed().kinds().next().unwrap());
         game.apply(seat, Action::Discard(tile)).unwrap();
         turns += 1;
@@ -105,4 +112,83 @@ fn hand_ends_without_winner_when_live_wall_runs_out() {
     assert_eq!(turns, game.discards().len());
     assert_eq!(game.apply(S[0], Action::Pass), Err(GameError::HandOver));
     assert_eq!(tiles_accounted_for(&game) + game.discards().len(), WALL_SIZE);
+}
+
+/// Seat 0 discards 9s. Seat 1 and seat 3 can win on it; seat 2 can pong it.
+const CONTESTED: [&str; 4] = ["123456789m1234z", "123456789p1119s", "1234567s99s5566z", "78s222333444z66z"];
+
+fn contested() -> Game {
+    let mut game = game(CONTESTED, "9s5m", "");
+    game.apply(S[0], Action::Discard(tile("9s"))).unwrap();
+    game
+}
+
+#[test]
+fn claim_window_asks_only_seats_with_options() {
+    let game = contested();
+    assert_eq!(game.to_act(), [S[1], S[2], S[3]]);
+    assert_eq!(game.legal_actions(S[1]), [Action::Win, Action::Pass]);
+    assert_eq!(game.legal_actions(S[2]), [Action::Pong, Action::Pass]);
+    // seat 3 is not after the discarder, so 78s cannot chow
+    assert_eq!(game.legal_actions(S[3]), [Action::Win, Action::Pass]);
+}
+
+#[test]
+fn closest_winner_takes_the_discard() {
+    let mut game = contested();
+    game.apply(S[3], Action::Win).unwrap();
+    game.apply(S[2], Action::Pong).unwrap();
+    assert_eq!(game.to_act(), [S[1]], "waits for every asked seat");
+    game.apply(S[1], Action::Win).unwrap();
+    let win = game.result().unwrap().win.unwrap();
+    assert_eq!((win.winner, win.source), (S[1], WinSource::Discard(S[0])));
+    assert!(game.hand(S[1]).is_winning());
+    assert!(game.discards()[0].claimed);
+}
+
+#[test]
+fn farther_win_beats_closer_pong() {
+    let mut game = contested();
+    game.apply(S[1], Action::Pass).unwrap();
+    game.apply(S[2], Action::Pong).unwrap();
+    game.apply(S[3], Action::Win).unwrap();
+    assert_eq!(game.result().unwrap().win.unwrap().winner, S[3]);
+}
+
+#[test]
+fn pong_takes_the_turn_without_a_draw() {
+    let mut game = contested();
+    game.apply(S[1], Action::Pass).unwrap();
+    game.apply(S[3], Action::Pass).unwrap();
+    game.apply(S[2], Action::Pong).unwrap();
+    assert_eq!(game.phase(), &Phase::Turn { seat: S[2], after_claim: true });
+    assert_eq!(game.hand(S[2]).melds().collect::<Vec<_>>(), [Meld::Pong(tile("9s"))]);
+    assert_eq!(game.last_draw(), None);
+    assert!(game.legal_actions(S[2]).iter().all(|a| matches!(a, Action::Discard(_))));
+    assert_eq!(game.public_tiles().to_string(), "999s");
+    game.apply(S[2], Action::Discard(tile("5z"))).unwrap();
+    assert_eq!(game.to_act(), [S[3]], "play continues after the claimer");
+}
+
+#[test]
+fn everyone_passing_moves_to_the_next_draw() {
+    let mut game = contested();
+    for seat in [S[1], S[2], S[3]] {
+        game.apply(seat, Action::Pass).unwrap();
+    }
+    assert_eq!(game.phase(), &Phase::Turn { seat: S[1], after_claim: false });
+    assert_eq!(game.last_draw(), Some(tile("5m")));
+}
+
+#[test]
+fn only_the_next_seat_may_chow_in_any_position() {
+    let hands = ["123456789m1234z", "24p3456789s1234z", "13p3456789s123z5z", "123456789p1235z"];
+    let mut game = game(hands, "3p", "");
+    game.apply(S[0], Action::Discard(tile("3p"))).unwrap();
+    assert_eq!(game.legal_actions(S[1]), [Action::Chow(tile("2p")), Action::Pass]);
+    assert_eq!(game.legal_actions(S[2]), [], "seat 2 holds 1p/3p but is not next");
+    assert_eq!(game.to_act(), [S[1]]);
+    game.apply(S[1], Action::Chow(tile("2p"))).unwrap();
+    assert_eq!(game.hand(S[1]).melds().collect::<Vec<_>>(), [Meld::Chow(tile("2p"))]);
+    assert_eq!(game.public_tiles().to_string(), "234p");
 }
