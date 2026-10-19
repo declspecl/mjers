@@ -5,8 +5,11 @@
 //! Everything is observational: it describes how these bots' hands turn out,
 //! not what would happen if a player changed course.
 
+mod composition;
 #[cfg(test)]
 mod tests;
+
+pub use composition::Composition;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -108,6 +111,12 @@ pub struct Tally {
     pub units: i64,
     /// Sum of live winning tiles at the moment of becoming ready.
     pub live: u64,
+    /// Of the wins: self-drawn.
+    pub self_draws: u64,
+    /// Summed over wins: discards at the table from becoming ready to winning.
+    pub table_turns: u64,
+    /// Summed over wins: the winner's own draws from becoming ready to winning.
+    pub own_draws: u64,
 }
 
 impl Tally {
@@ -131,6 +140,21 @@ impl Tally {
         self.wins += o.wins;
         self.units += o.units;
         self.live += o.live;
+        self.self_draws += o.self_draws;
+        self.table_turns += o.table_turns;
+        self.own_draws += o.own_draws;
+    }
+
+    pub fn self_draw_share(&self) -> f64 {
+        self.self_draws as f64 / self.wins.max(1) as f64
+    }
+
+    pub fn mean_table_turns(&self) -> f64 {
+        self.table_turns as f64 / self.wins.max(1) as f64
+    }
+
+    pub fn mean_own_draws(&self) -> f64 {
+        self.own_draws as f64 / self.wins.max(1) as f64
     }
 
     pub fn win_rate(&self) -> f64 {
@@ -163,6 +187,9 @@ pub struct Study {
     pub tanki_tiles: BTreeMap<String, Tally>,
     /// Seats by live winning tiles when they first became ready (8 means 8+).
     pub ready_live: BTreeMap<u32, Tally>,
+    /// Seats by how many different tiles they waited on when first ready.
+    pub ready_waits: BTreeMap<String, Tally>,
+    pub composition: Composition,
 }
 
 impl Study {
@@ -190,11 +217,13 @@ impl Study {
             (&mut self.exposed, &o.exposed),
             (&mut self.ready_shapes, &o.ready_shapes),
             (&mut self.tanki_tiles, &o.tanki_tiles),
+            (&mut self.ready_waits, &o.ready_waits),
         ] {
             for (key, tally) in theirs {
                 mine.entry(key.clone()).or_default().merge(tally);
             }
         }
+        self.composition.merge(&o.composition);
         for (key, tally) in &o.ready_live {
             self.ready_live.entry(*key).or_default().merge(tally);
         }
@@ -219,6 +248,9 @@ pub struct ReadyShape {
     pub live: u32,
     /// The waited tile, for single-tile eye waits.
     pub tanki_tile: Option<Tile>,
+    /// Discards at the table, and events, when the seat became ready.
+    pub discards_at: usize,
+    pub events_at: usize,
 }
 
 pub fn ready_shape(
@@ -250,6 +282,8 @@ pub fn ready_shape(
         waits: waits.len(),
         live,
         tanki_tile,
+        discards_at: 0,
+        events_at: 0,
     })
 }
 
@@ -268,7 +302,11 @@ fn study_hand(
         for seat in Seat::ALL {
             let hand = game.hand(seat);
             if first_ready[seat.index()].is_none() && hand.size() == 13 && hand.shanten() == 0 {
-                first_ready[seat.index()] = ready_shape(hand, game.public_tiles());
+                first_ready[seat.index()] = ready_shape(hand, game.public_tiles()).map(|shape| ReadyShape {
+                    discards_at: game.discards().len(),
+                    events_at: game.events().len(),
+                    ..shape
+                });
             }
         }
     });
@@ -294,10 +332,19 @@ fn record(
         let pongs = melds.iter().filter(|m| matches!(m, Meld::Pong(_)) || matches!(m, Meld::Kong(_, KongKind::Exposed))).count();
         study.exposed.entry(format!("{chows}c {pongs}p")).or_default().add(won, units, 0);
         if let Some(shape) = first_ready[seat.index()] {
-            study.ready_shapes.entry(shape.name.to_string()).or_default().add(won, units, shape.live);
-            study.ready_live.entry(shape.live.min(8)).or_default().add(won, units, shape.live);
+            let mut tally = Tally::default();
+            tally.add(won, units, shape.live);
+            if won {
+                tally.self_draws = (result.win.map(|w| w.source) == Some(WinSource::SelfDraw)) as u64;
+                tally.table_turns = (game.discards().len() - shape.discards_at) as u64;
+                tally.own_draws = game.events()[shape.events_at..].iter().filter(|e| matches!(e, Event::Draw { seat: s, .. } if *s == seat)).count() as u64;
+            }
+            let waits = if shape.waits >= 5 { "5+".to_string() } else { shape.waits.to_string() };
+            study.ready_shapes.entry(shape.name.to_string()).or_default().merge(&tally);
+            study.ready_live.entry(shape.live.min(8)).or_default().merge(&tally);
+            study.ready_waits.entry(waits).or_default().merge(&tally);
             if let Some(tile) = shape.tanki_tile {
-                study.tanki_tiles.entry(CLASSES[class_of(tile)].to_string()).or_default().add(won, units, shape.live);
+                study.tanki_tiles.entry(CLASSES[class_of(tile)].to_string()).or_default().merge(&tally);
             }
         }
     }
@@ -315,6 +362,8 @@ fn record(
         );
         study.winning_splits.entry(key).or_default().add(true, totals[seat.index()], 0);
         study.winning_eyes.entry(CLASSES[class_of(eye)].to_string()).or_default().add(true, totals[seat.index()], 0);
+        let concealed_sets: Vec<Meld> = all[hand.meld_count()..].to_vec();
+        study.composition.record(game, seat, &concealed_sets);
     }
 }
 

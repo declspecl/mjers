@@ -60,3 +60,23 @@ fn classes_group_suits_and_honors() {
     assert_eq!((class("1m"), class("1p"), class("9s")), ("1", "1", "9"));
     assert_eq!((class("4z"), class("5z"), class("7z")), ("wind", "dragon", "dragon"));
 }
+
+#[test]
+fn composition_and_turns_are_consistent() {
+    let s = study(&Ruleset::family(), &table(), Seeds { start: 0, count: 300 });
+    let c = &s.composition;
+    let wins: u64 = s.winning_splits.values().map(|t| t.count).sum();
+    assert_eq!(c.hands, wins);
+    let sets = c.exposed_chows + c.concealed_chows + c.exposed_pongs + c.concealed_pongs + c.exposed_kongs + c.concealed_kongs;
+    assert_eq!(sets, 4 * wins);
+    assert_eq!(c.terminal_chows + c.inner_chows, c.exposed_chows + c.concealed_chows);
+    assert_eq!(c.claimed_two_sided + c.claimed_gap + c.claimed_edge, c.exposed_chows);
+    assert_eq!(c.chow_suits.iter().sum::<u64>(), c.multi_chow_hands);
+    assert!(c.run_of_four_plus <= c.overlapping + c.back_to_back);
+    let ready: u64 = s.ready_waits.values().map(|t| t.count).sum();
+    assert_eq!(ready, s.ready_shapes.values().map(|t| t.count).sum::<u64>());
+    for t in s.ready_shapes.values() {
+        assert!(t.self_draws <= t.wins);
+        assert!(t.own_draws <= t.table_turns + t.wins);
+    }
+}
