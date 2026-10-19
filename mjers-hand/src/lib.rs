@@ -2,6 +2,7 @@
 
 pub mod hand;
 pub mod meld;
+pub mod shanten;
 pub mod win;
 
 pub use hand::{
