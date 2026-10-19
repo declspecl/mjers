@@ -25,6 +25,8 @@ mjers-game = { path = "mjers-game" }
 mjers-bot = { path = "mjers-bot" }
 mjers-advisor = { path = "mjers-advisor" }
 mjers-sim = { path = "mjers-sim" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

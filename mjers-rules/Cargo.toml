@@ -8,6 +8,10 @@ license.workspace = true
 [dependencies]
 mjers-tile.workspace = true
 mjers-hand.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true
