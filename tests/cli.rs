@@ -160,3 +160,11 @@ fn advise_reads_traces() {
     assert!(!advice["ranked"].as_array().unwrap().is_empty());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn study_prints_every_section() {
+    let out = stdout(&mj(&["study", "--hands", "100"], ""));
+    for section in ["winning hands by set split", "wait shape when first ready", "tile fates", "dragon", "realized%"] {
+        assert!(out.contains(section), "{section}: {out}");
+    }
+}

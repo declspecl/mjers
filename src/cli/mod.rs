@@ -5,6 +5,7 @@ mod load;
 mod play;
 mod provenance;
 mod sim;
+mod study;
 mod trace;
 mod tune;
 
@@ -36,6 +37,8 @@ enum Command {
     Trace(trace::RecordArgs),
     /// Verify and narrate a recorded trace.
     Replay(trace::ReplayArgs),
+    /// Tile fates, ready shapes, and winning set splits across many hands.
+    Study(study::Args),
     /// Search heuristic bot parameters, validated on held-out seeds.
     Tune(tune::Args),
 }
@@ -51,6 +54,7 @@ impl Cli {
             Command::Trace(args) => trace::record(args),
             Command::Replay(args) => trace::replay(args),
             Command::Tune(args) => tune::run(args),
+            Command::Study(args) => study::run(args),
         }
     }
 }
