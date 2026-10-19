@@ -22,7 +22,7 @@ pub fn readiness(
 ) -> f64 {
     let melds = obs.melds(opponent).count() as f64;
     let discards = obs.discards().iter().filter(|d| d.seat == opponent).count() as f64;
-    (0.035 * discards + 0.17 * melds).min(0.95)
+    (0.02 * discards + 0.22 * melds).min(0.95)
 }
 
 /// Copies of each tile this seat cannot account for.
@@ -64,6 +64,24 @@ pub fn wait_weight(
     weight
 }
 
+/// Tiles `opponent` has visibly declined to win on: discarded by others since
+/// the opponent's own latest discard. A player who always takes a win is not
+/// currently waiting on any of them.
+pub fn passed(
+    obs: &Observation<'_>,
+    opponent: Seat,
+) -> TileCounts {
+    let discards = obs.discards();
+    let since = discards.iter().rposition(|d| d.seat == opponent).map_or(0, |i| i + 1);
+    let mut passed = TileCounts::new();
+    for d in &discards[since..] {
+        if d.seat != opponent && passed.get(d.tile) == 0 {
+            passed.add(d.tile);
+        }
+    }
+    passed
+}
+
 /// Expected number of opponents `tile` deals into, roughly.
 pub fn danger(
     obs: &Observation<'_>,
@@ -71,7 +89,7 @@ pub fn danger(
     unseen: &TileCounts,
 ) -> f64 {
     let weight = wait_weight(tile, unseen) / MAX_WEIGHT;
-    obs.seat().others().map(|o| readiness(obs, o)).sum::<f64>() * weight
+    obs.seat().others().filter(|&o| passed(obs, o).get(tile) == 0).map(|o| readiness(obs, o)).sum::<f64>() * weight
 }
 
 const MAX_WEIGHT: f64 = 3.3;
@@ -117,5 +135,47 @@ mod tests {
             unseen.remove(tile("7z"));
         }
         assert_eq!(wait_weight(tile("7z"), &unseen), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod passed_tests {
+    use std::sync::Arc;
+
+    use mjers_game::{
+        Action,
+        Game,
+        Ruleset,
+    };
+
+    use super::*;
+
+    #[test]
+    fn passed_tiles_are_those_discarded_after_the_opponents_last_discard() {
+        let mut game = Game::new(Arc::new(Ruleset::family()), 1, Seat::ALL[0]);
+        let mut discarded = Vec::new();
+        for _ in 0..6 {
+            while let Some(&seat) = game.to_act().first() {
+                let legal = game.legal_actions(seat);
+                if legal.contains(&Action::Pass) {
+                    game.apply(seat, Action::Pass).unwrap();
+                    continue;
+                }
+                let tile = game.last_draw().unwrap();
+                discarded.push((seat, tile));
+                game.apply(seat, Action::Discard(tile)).unwrap();
+                break;
+            }
+        }
+        // Six discards in turn order 0, 1, 2, 3, 0, 1 with every claim passed;
+        // seat 2's latest was the third, so it has passed everything after.
+        let obs = game.observe(Seat::ALL[0]);
+        let mut expected = TileCounts::new();
+        for &(seat, tile) in &discarded[3..] {
+            if seat != Seat::ALL[2] && expected.get(tile) == 0 {
+                expected.add(tile);
+            }
+        }
+        assert_eq!(passed(&obs, Seat::ALL[2]), expected);
     }
 }
