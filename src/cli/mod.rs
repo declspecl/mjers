@@ -5,6 +5,7 @@ mod play;
 mod provenance;
 mod sim;
 mod trace;
+mod tune;
 
 use clap::{
     Parser,
@@ -32,6 +33,8 @@ enum Command {
     Trace(trace::RecordArgs),
     /// Verify and narrate a recorded trace.
     Replay(trace::ReplayArgs),
+    /// Search heuristic bot parameters, validated on held-out seeds.
+    Tune(tune::Args),
 }
 
 impl Cli {
@@ -43,6 +46,7 @@ impl Cli {
             Command::Compare(args) => compare::run(args),
             Command::Trace(args) => trace::record(args),
             Command::Replay(args) => trace::replay(args),
+            Command::Tune(args) => tune::run(args),
         }
     }
 }

@@ -126,3 +126,16 @@ fn strategy_files_load() {
     let out = stdout(&mj(&["compare", path, "efficiency", "--hands", "20"], ""));
     assert!(out.contains("no-chow vs efficiency"), "{out}");
 }
+
+#[test]
+fn tune_writes_a_loadable_strategy() {
+    let dir = std::env::temp_dir().join(format!("mj-tune-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("tuned.json");
+    let out = stdout(&mj(&["tune", "--hands", "20", "--rounds", "1", "--output", path.to_str().unwrap()], ""));
+    assert!(out.contains("held-out seeds 20..40"), "{out}");
+    let spec: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(spec["name"], "tuned");
+    stdout(&mj(&["compare", path.to_str().unwrap(), "efficiency", "--hands", "10"], ""));
+    std::fs::remove_dir_all(dir).unwrap();
+}
