@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "no-chow",
+  "params": { "chow": "never" }
+}

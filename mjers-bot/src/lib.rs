@@ -3,10 +3,13 @@
 pub mod defense;
 pub mod heuristic;
 pub mod policy;
+pub mod spec;
 
 pub use heuristic::{
-    DefensiveBot,
-    EfficiencyBot,
+    ClaimRule,
+    HeuristicBot,
+    KongRule,
+    Params,
 };
 pub use policy::{
     Policy,
@@ -14,3 +17,4 @@ pub use policy::{
     decide,
     play_out,
 };
+pub use spec::BotSpec;

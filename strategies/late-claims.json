@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "late-claims",
+  "params": { "claim_max_shanten": 1 }
+}

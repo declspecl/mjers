@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "claim-everything",
+  "params": { "chow": "always", "pong": "always", "exposed_kong": "always", "concealed_kong": "always", "upgrade_kong": "always" }
+}

@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "closed",
+  "params": { "chow": "never", "pong": "never", "exposed_kong": "never" }
+}

@@ -1,0 +1,5 @@
+{
+  "kind": "heuristic",
+  "name": "defensive",
+  "params": { "caution": 1.0, "fold_shanten": 2, "fold_readiness": 0.5 }
+}

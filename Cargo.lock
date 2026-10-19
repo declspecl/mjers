@@ -448,6 +448,8 @@ dependencies = [
  "mjers-hand",
  "mjers-rules",
  "mjers-tile",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
