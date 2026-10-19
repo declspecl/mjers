@@ -45,8 +45,10 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     }
     println!("{} hands, rules {}, every seat {}", s.hands, rules.name, spec.name());
     print_splits(&s);
+    print_composition(&s);
     print_tallies("exposed melds at the end (all seats)", "exposed", &s.exposed, false);
     print_tallies("wait shape when first ready", "shape", &s.ready_shapes, true);
+    print_tallies("different tiles waited on when first ready", "tiles", &s.ready_waits, true);
     let live: BTreeMap<String, Tally> = s.ready_live.iter().map(|(k, v)| (if *k == 8 { "8+".to_string() } else { k.to_string() }, v.clone())).collect();
     print_tallies("live winning tiles when first ready", "live", &live, true);
     print_tallies("single-tile eye waits (tanki) by tile", "tile", &s.tanki_tiles, true);
@@ -74,6 +76,46 @@ fn print_splits(s: &Study) {
     println!();
 }
 
+fn print_composition(s: &Study) {
+    let c = &s.composition;
+    let per = |n: u64| n as f64 / c.hands.max(1) as f64;
+    let pct = |n: u64, of: u64| 100.0 * n as f64 / of.max(1) as f64;
+    println!();
+    println!("average winning hand (sets per hand)");
+    println!("{:<8} {:>8} {:>10}", "", "exposed", "concealed");
+    println!("{:<8} {:>8.2} {:>10.2}", "chows", per(c.exposed_chows), per(c.concealed_chows));
+    println!("{:<8} {:>8.2} {:>10.2}", "pongs", per(c.exposed_pongs), per(c.concealed_pongs));
+    println!("{:<8} {:>8.3} {:>10.3}", "kongs", per(c.exposed_kongs), per(c.concealed_kongs));
+    let chows = c.terminal_chows + c.inner_chows;
+    println!();
+    println!("chows in winning hands");
+    println!("  touching a terminal (123/789): {:.1}%, inner: {:.1}%", pct(c.terminal_chows, chows), pct(c.inner_chows, chows));
+    println!(
+        "  claimed chows completed: two-sided {:.1}%, gap {:.1}%, edge {:.1}%",
+        pct(c.claimed_two_sided, c.exposed_chows),
+        pct(c.claimed_gap, c.exposed_chows),
+        pct(c.claimed_edge, c.exposed_chows)
+    );
+    println!("  hands with 2+ chows: {:.1}% of wins; of those, chows span", pct(c.multi_chow_hands, c.hands));
+    println!(
+        "    1 suit {:.1}%, 2 suits {:.1}%, 3 suits {:.1}%",
+        pct(c.chow_suits[1], c.multi_chow_hands),
+        pct(c.chow_suits[2], c.multi_chow_hands),
+        pct(c.chow_suits[3], c.multi_chow_hands)
+    );
+    println!(
+        "    4+ in a row {:.1}% (overlapping like 345+456: {:.1}%, back to back like 456+789: {:.1}%)",
+        pct(c.run_of_four_plus, c.multi_chow_hands),
+        pct(c.overlapping, c.multi_chow_hands),
+        pct(c.back_to_back, c.multi_chow_hands)
+    );
+    println!(
+        "    same chow twice {:.1}%, full 123456789 straight {:.1}%",
+        pct(c.repeated, c.multi_chow_hands),
+        pct(c.straight, c.multi_chow_hands)
+    );
+}
+
 fn print_tallies(
     title: &str,
     label: &str,
@@ -82,11 +124,26 @@ fn print_tallies(
 ) {
     println!();
     println!("{title}");
-    println!("{label:<24} {:>9} {:>7} {:>8}{}", "seats", "win%", "ev", if show_live { "     live" } else { "" });
+    let extra = if show_live {
+        format!(" {:>8} {:>7} {:>8} {:>9}", "live", "self%", "turns", "own draws")
+    } else {
+        String::new()
+    };
+    println!("{label:<24} {:>9} {:>7} {:>8}{extra}", "seats", "win%", "ev");
     let mut rows: Vec<_> = tallies.iter().collect();
     rows.sort_by(|a, b| b.1.win_rate().total_cmp(&a.1.win_rate()));
     for (key, t) in rows {
-        let live = if show_live { format!(" {:>8.1}", t.mean_live()) } else { String::new() };
+        let live = if show_live {
+            format!(
+                " {:>8.1} {:>6.1}% {:>8.1} {:>9.1}",
+                t.mean_live(),
+                100.0 * t.self_draw_share(),
+                t.mean_table_turns(),
+                t.mean_own_draws()
+            )
+        } else {
+            String::new()
+        };
         println!("{key:<24} {:>9} {:>6.1}% {:>+8.2}{live}", t.count, 100.0 * t.win_rate(), t.mean_units());
     }
 }
