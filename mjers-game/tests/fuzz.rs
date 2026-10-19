@@ -2,20 +2,20 @@
 
 use std::sync::Arc;
 
-use mjers_game::wall::WALL_SIZE;
-use mjers_game::{
+use mjers_game::action::{
     Action,
-    Event,
-    Game,
     Offer,
     Phase,
-    Rng,
-    Ruleset,
-    Seat,
 };
-use mjers_hand::Meld;
-use mjers_rules::WinSource;
-use mjers_tile::TileCounts;
+use mjers_game::game::Game;
+use mjers_game::rng::Rng;
+use mjers_game::trace::Event;
+use mjers_game::wall::WALL_SIZE;
+use mjers_hand::meld::Meld;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::WinSource;
+use mjers_tile::counts::TileCounts;
 
 const GAMES: u64 = 2_000;
 

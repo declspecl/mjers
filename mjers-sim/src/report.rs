@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use mjers_bot::BotSpec;
-use mjers_game::Ruleset;
+use mjers_bot::spec::BotSpec;
+use mjers_rules::ruleset::Ruleset;
 use serde::{
     Deserialize,
     Serialize,

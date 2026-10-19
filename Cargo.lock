@@ -502,18 +502,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "mjers"
-version = "0.1.0"
-dependencies = [
- "mjers-advisor",
- "mjers-bot",
- "mjers-game",
- "mjers-hand",
- "mjers-rules",
- "mjers-tile",
-]
-
-[[package]]
 name = "mjers-advisor"
 version = "0.1.0"
 dependencies = [
@@ -545,8 +533,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "mjers",
+ "mjers-advisor",
+ "mjers-bot",
+ "mjers-game",
+ "mjers-hand",
+ "mjers-rules",
  "mjers-sim",
+ "mjers-tile",
  "serde",
  "serde_json",
 ]

@@ -7,27 +7,33 @@
 
 use std::sync::Arc;
 
-use mjers_bot::{
-    BotSpec,
-    play_out,
-};
-use mjers_game::rng::derive_seed;
-use mjers_game::wall::full_set;
-use mjers_game::{
+use mjers_bot::policy::play_out;
+use mjers_bot::spec::BotSpec;
+use mjers_game::action::{
     Action,
-    Decision,
-    Game,
-    Observation,
     Offer,
+};
+use mjers_game::game::Game;
+use mjers_game::observation::{
+    Decision,
+    Observation,
+};
+use mjers_game::position::{
     Position,
     ResumePoint,
-    Rng,
-    Seat,
-    WallTile,
 };
-use mjers_hand::Hand;
-use mjers_rules::WinSource;
-use mjers_tile::TileCounts;
+use mjers_game::rng::{
+    Rng,
+    derive_seed,
+};
+use mjers_game::wall::{
+    WallTile,
+    full_set,
+};
+use mjers_hand::hand::Hand;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::WinSource;
+use mjers_tile::counts::TileCounts;
 use serde::{
     Deserialize,
     Serialize,
@@ -171,17 +177,17 @@ fn mean_and_stderr(values: impl Iterator<Item = f64> + Clone) -> (f64, f64) {
 
 #[cfg(test)]
 mod tests {
-    use mjers_game::Ruleset;
     use mjers_game::wall::WALL_SIZE;
+    use mjers_rules::ruleset::Ruleset;
 
     use super::*;
 
     fn midgame(seed: u64) -> Game {
         let mut game = Game::new(Arc::new(Ruleset::family()), seed, Seat::ALL[0]);
-        let mut bot = mjers_bot::HeuristicBot::efficiency();
+        let mut bot = mjers_bot::heuristic::HeuristicBot::efficiency();
         for _ in 0..(20 + seed % 20) {
             let Some(&seat) = game.to_act().first() else { break };
-            let action = mjers_bot::decide(&game, seat, &mut bot);
+            let action = mjers_bot::policy::decide(&game, seat, &mut bot);
             game.apply(seat, action).unwrap();
         }
         game

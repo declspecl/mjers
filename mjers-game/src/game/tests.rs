@@ -1,10 +1,9 @@
-use mjers_tile::Bonus;
-
-use mjers_hand::{
+use mjers_hand::meld::{
     KongKind,
     Meld,
 };
-use mjers_rules::WinSource;
+use mjers_rules::settlement::WinSource;
+use mjers_tile::tile::Bonus;
 
 use super::*;
 use crate::action::{
@@ -293,7 +292,7 @@ fn kongs_are_paid_when_the_wall_runs_out() {
     }
     let result = game.result().unwrap();
     assert_eq!(result.win, None);
-    assert!(result.kongs.contains(&mjers_rules::Kong {
+    assert!(result.kongs.contains(&mjers_rules::settlement::Kong {
         owner: S[0],
         kind: KongKind::Concealed
     }));
@@ -324,7 +323,7 @@ fn traces_replay_exactly_through_json() {
         let game = play_greedy(seed);
         let trace = game.trace();
         let json = serde_json::to_string(&trace).unwrap();
-        let parsed: crate::Trace = serde_json::from_str(&json).unwrap();
+        let parsed: crate::trace::Trace = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, trace, "seed {seed}");
         let replayed = parsed.replay().unwrap();
         assert_eq!(replayed.result(), game.result());
@@ -340,18 +339,18 @@ fn tampered_traces_are_rejected() {
     assert!(trace.replay().is_err());
     let mut short = play_greedy(1).trace();
     short.wall.pop();
-    assert_eq!(short.replay().unwrap_err(), crate::ReplayError::Wall(143));
+    assert_eq!(short.replay().unwrap_err(), crate::trace::ReplayError::Wall(143));
 }
 
 #[test]
 fn events_tell_the_story() {
     let game = play_greedy(5);
     let events = game.events();
-    assert_eq!(events.iter().filter(|e| matches!(e, crate::Event::Deal { .. })).count(), 4);
-    let discards = events.iter().filter(|e| matches!(e, crate::Event::Discard { .. })).count();
+    assert_eq!(events.iter().filter(|e| matches!(e, crate::trace::Event::Deal { .. })).count(), 4);
+    let discards = events.iter().filter(|e| matches!(e, crate::trace::Event::Discard { .. })).count();
     assert_eq!(discards, game.discards().len());
-    assert!(matches!(events.last(), Some(crate::Event::Win { .. } | crate::Event::Exhausted)));
-    let deal = events.iter().find(|e| matches!(e, crate::Event::Deal { .. })).unwrap();
+    assert!(matches!(events.last(), Some(crate::trace::Event::Win { .. } | crate::trace::Event::Exhausted)));
+    let deal = events.iter().find(|e| matches!(e, crate::trace::Event::Deal { .. })).unwrap();
     assert!(serde_json::to_string(deal).unwrap().contains("\"event\":\"deal\""));
 }
 
@@ -391,7 +390,7 @@ fn robbing_the_kong_wins_off_the_kong_owner() {
         &Phase::Claim {
             tile: tile("5p"),
             from: S[1],
-            offer: crate::Offer::KongUpgrade
+            offer: crate::action::Offer::KongUpgrade
         }
     );
     assert_eq!(game.legal_actions(S[2]), [Action::Win, Action::Pass]);

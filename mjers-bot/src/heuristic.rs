@@ -3,20 +3,18 @@
 #[cfg(test)]
 mod tests;
 
-use mjers_game::{
-    Action,
+use mjers_game::action::Action;
+use mjers_game::observation::{
     Decision,
     Observation,
 };
-use mjers_hand::{
-    DiscardOption,
-    Hand,
-    shanten,
-};
-use mjers_tile::tile::SUITED_KINDS;
-use mjers_tile::{
+use mjers_hand::hand::Hand;
+use mjers_hand::shanten;
+use mjers_hand::ukeire::DiscardOption;
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::{
+    SUITED_KINDS,
     Tile,
-    TileCounts,
 };
 use serde::{
     Deserialize,

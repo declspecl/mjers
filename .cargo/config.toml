@@ -1,3 +1,3 @@
 [alias]
 # Engine crates must stay buildable for the browser.
-wasm-check = "build --target wasm32-unknown-unknown -p mjers-tile -p mjers-hand -p mjers-rules -p mjers-game -p mjers-bot -p mjers-advisor -p mjers"
+wasm-check = "build --target wasm32-unknown-unknown -p mjers-tile -p mjers-hand -p mjers-rules -p mjers-game -p mjers-bot -p mjers-advisor"

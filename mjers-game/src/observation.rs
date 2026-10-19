@@ -1,18 +1,14 @@
 //! What one seat may see. Policies receive only this.
 
-use mjers_hand::{
+use mjers_hand::hand::{
     BonusSet,
     Hand,
-    Meld,
 };
-use mjers_rules::{
-    Ruleset,
-    Seat,
-};
-use mjers_tile::{
-    Tile,
-    TileCounts,
-};
+use mjers_hand::meld::Meld;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::Tile;
 
 use crate::action::{
     Action,

@@ -1,15 +1,15 @@
 use std::collections::BTreeMap;
 
+use mjers_sim::report::Report;
+use mjers_sim::runner::{
+    Seeds,
+    Table,
+};
 use mjers_sim::study::{
     CLASSES,
     Study,
     Tally,
     study,
-};
-use mjers_sim::{
-    Report,
-    Seeds,
-    Table,
 };
 
 use super::{

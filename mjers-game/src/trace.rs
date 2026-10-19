@@ -3,17 +3,17 @@
 use std::fmt;
 use std::sync::Arc;
 
-use mjers_hand::Meld;
-use mjers_rules::{
+use mjers_hand::meld::Meld;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::{
     HandResult,
-    Ruleset,
-    Seat,
     WinSource,
 };
-use mjers_tile::{
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::{
     Bonus,
     Tile,
-    TileCounts,
 };
 use serde::{
     Deserialize,

@@ -1,4 +1,4 @@
-use mjers_bot::BotSpec;
+use mjers_bot::spec::BotSpec;
 
 use super::*;
 use crate::runner::play_hand;

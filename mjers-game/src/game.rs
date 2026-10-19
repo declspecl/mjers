@@ -6,25 +6,26 @@ mod tests;
 
 use std::sync::Arc;
 
-use mjers_hand::hand::MAX_MELDS;
-use mjers_hand::{
+use mjers_hand::hand::{
     Hand,
-    Meld,
+    MAX_MELDS,
 };
-use mjers_rules::{
-    HandResult,
-    Ruleset,
+use mjers_hand::meld::Meld;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::{
     SEATS,
     Seat,
+};
+use mjers_rules::settlement::{
+    HandResult,
     Settlement,
     WinSource,
 };
-use mjers_tile::counts::COPIES;
-use mjers_tile::{
-    Tile,
+use mjers_tile::counts::{
+    COPIES,
     TileCounts,
 };
-
+use mjers_tile::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,

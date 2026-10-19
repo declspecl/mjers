@@ -2,11 +2,9 @@
 
 use std::sync::Arc;
 
-use mjers_rules::{
-    Ruleset,
-    Seat,
-};
-use mjers_tile::{
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_tile::tile::{
     Bonus,
     Tile,
 };

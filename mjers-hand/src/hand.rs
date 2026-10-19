@@ -7,10 +7,10 @@ mod tests;
 
 use std::fmt;
 
-use mjers_tile::{
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::{
     Bonus,
     Tile,
-    TileCounts,
 };
 
 use crate::meld::{

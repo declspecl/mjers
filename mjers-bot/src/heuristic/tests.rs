@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use mjers_game::{
-    Game,
-    Ruleset,
-    Seat,
-};
+use mjers_game::game::Game;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
 
 use super::*;
 use crate::policy::{
@@ -92,7 +90,7 @@ fn deal_ins(
             let mut game = Game::new(rules.clone(), seed, Seat::ALL[(seed % 4) as usize]);
             let mut table: [Box<dyn Policy>; 4] = std::array::from_fn(|i| if i == 0 { bot() } else { Box::new(HeuristicBot::efficiency()) as Box<dyn Policy> });
             play_out(&mut game, &mut table);
-            game.result().unwrap().win.is_some_and(|w| w.source == mjers_rules::WinSource::Discard(Seat::ALL[0]))
+            game.result().unwrap().win.is_some_and(|w| w.source == mjers_rules::settlement::WinSource::Discard(Seat::ALL[0]))
         })
         .count()
 }

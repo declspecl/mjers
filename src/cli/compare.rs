@@ -1,9 +1,9 @@
-use mjers_sim::{
+use mjers_sim::compare::compare;
+use mjers_sim::report::{
     ComparisonResult,
     Report,
-    Seeds,
-    compare,
 };
+use mjers_sim::runner::Seeds;
 
 use super::sim::{
     print_header,

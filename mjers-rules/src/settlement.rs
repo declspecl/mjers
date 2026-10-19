@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests;
 
-use mjers_hand::KongKind;
+use mjers_hand::meld::KongKind;
 use serde::{
     Deserialize,
     Serialize,

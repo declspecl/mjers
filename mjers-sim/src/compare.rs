@@ -3,11 +3,9 @@
 
 use std::sync::Arc;
 
-use mjers_bot::BotSpec;
-use mjers_game::{
-    Ruleset,
-    Seat,
-};
+use mjers_bot::spec::BotSpec;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
 use rayon::prelude::*;
 use serde::{
     Deserialize,

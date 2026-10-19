@@ -2,11 +2,13 @@
 
 use std::sync::Arc;
 
-use mjers_rules::{
-    HandResult,
-    Ruleset,
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::{
     SEATS,
     Seat,
+};
+use mjers_rules::settlement::{
+    HandResult,
     Settlement,
 };
 use serde::{

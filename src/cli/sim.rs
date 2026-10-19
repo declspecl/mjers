@@ -5,15 +5,19 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers::bot::BotSpec;
-use mjers_sim::{
-    Metrics,
+use mjers_bot::spec::BotSpec;
+use mjers_sim::features::write_features;
+use mjers_sim::report::{
     Report,
-    Seeds,
     SimulationResult,
+};
+use mjers_sim::runner::{
+    Seeds,
     Table,
+};
+use mjers_sim::stats::{
+    Metrics,
     simulate,
-    write_features,
 };
 
 use super::{

@@ -2,11 +2,9 @@
 
 use std::fmt;
 
-use mjers_rules::{
-    HandResult,
-    Seat,
-};
-use mjers_tile::Tile;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::HandResult;
+use mjers_tile::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,

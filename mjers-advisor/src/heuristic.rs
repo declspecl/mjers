@@ -6,16 +6,14 @@ use mjers_bot::heuristic::{
     after_kong,
     best_discard,
 };
-use mjers_game::{
-    Action,
+use mjers_game::action::Action;
+use mjers_game::observation::{
     Decision,
     Observation,
-    Seat,
 };
-use mjers_hand::{
-    Hand,
-    Ukeire,
-};
+use mjers_hand::hand::Hand;
+use mjers_hand::ukeire::Ukeire;
+use mjers_rules::seat::Seat;
 use serde::{
     Deserialize,
     Serialize,
@@ -135,7 +133,7 @@ fn assess(
     }
 }
 
-fn claimed_tile(obs: &Observation<'_>) -> mjers_tile::Tile {
+fn claimed_tile(obs: &Observation<'_>) -> mjers_tile::tile::Tile {
     match obs.decision() {
         Decision::Claim { tile, .. } => tile,
         _ => unreachable!("claims are only legal in a claim window"),
@@ -178,7 +176,7 @@ fn describe(
 
 fn danger_reason(
     obs: &Observation<'_>,
-    tile: mjers_tile::Tile,
+    tile: mjers_tile::tile::Tile,
     danger: f64,
 ) -> String {
     let safe_against: Vec<String> = obs.seat().others().filter(|&o| defense::passed(obs, o).get(tile) > 0).map(|o: Seat| o.to_string()).collect();
@@ -202,10 +200,8 @@ fn danger_reason(
 mod tests {
     use std::sync::Arc;
 
-    use mjers_game::{
-        Game,
-        Ruleset,
-    };
+    use mjers_game::game::Game;
+    use mjers_rules::ruleset::Ruleset;
 
     use super::*;
 
@@ -227,12 +223,12 @@ mod tests {
         let rules = Arc::new(Ruleset::family());
         for seed in 0.. {
             let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]);
-            let mut bot = mjers_bot::HeuristicBot::efficiency();
+            let mut bot = mjers_bot::heuristic::HeuristicBot::efficiency();
             while let Some(&seat) = game.to_act().first() {
                 if game.legal_actions(seat).contains(&Action::SelfDrawWin) {
                     return (game, seat);
                 }
-                let action = mjers_bot::decide(&game, seat, &mut bot);
+                let action = mjers_bot::policy::decide(&game, seat, &mut bot);
                 game.apply(seat, action).unwrap();
             }
         }

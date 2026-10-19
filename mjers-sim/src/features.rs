@@ -8,20 +8,20 @@
 use std::io::Write;
 use std::sync::Arc;
 
-use mjers_game::{
-    Event,
-    Game,
-    Ruleset,
-    Seat,
-};
-use mjers_hand::wait::wait_shapes;
-use mjers_hand::{
+use mjers_game::game::Game;
+use mjers_game::trace::Event;
+use mjers_hand::meld::{
     KongKind,
     Meld,
-    WaitShape,
 };
-use mjers_rules::WinSource;
-use mjers_tile::{
+use mjers_hand::wait::{
+    WaitShape,
+    wait_shapes,
+};
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::WinSource;
+use mjers_tile::tile::{
     Suit,
     Tile,
 };
@@ -179,7 +179,7 @@ pub fn write_features(
 
 #[cfg(test)]
 mod tests {
-    use mjers_bot::BotSpec;
+    use mjers_bot::spec::BotSpec;
 
     use super::*;
 

@@ -2,22 +2,20 @@
 
 use std::collections::HashSet;
 
+use mjers_hand::shanten::shanten;
 use mjers_hand::ukeire::{
     discard_options,
     ukeire,
 };
-use mjers_hand::{
+use mjers_hand::win::{
     is_complete,
-    shanten,
     waits,
 };
+use mjers_tile::counts::TileCounts;
 use mjers_tile::tile::{
     KINDS,
     SUITED_KINDS,
-};
-use mjers_tile::{
     Tile,
-    TileCounts,
 };
 use proptest::prelude::*;
 

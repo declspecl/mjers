@@ -6,14 +6,14 @@
 #[cfg(test)]
 mod tests;
 
+use mjers_tile::counts::{
+    COPIES,
+    TileCounts,
+};
 use mjers_tile::tile::{
     KINDS,
     SUITED_KINDS,
-};
-use mjers_tile::{
     Tile,
-    TileCounts,
-    counts::COPIES,
 };
 
 use crate::hand::{

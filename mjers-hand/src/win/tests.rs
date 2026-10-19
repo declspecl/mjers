@@ -1,7 +1,7 @@
-use mjers_tile::Suit;
+use mjers_tile::tile::Suit;
 
 use super::*;
-use crate::Meld;
+use crate::meld::Meld;
 
 fn complete(
     notation: &str,

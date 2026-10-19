@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "mjers",
     "mjers-tile",
     "mjers-hand",
     "mjers-rules",
@@ -17,7 +16,6 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-mjers = { path = "mjers" }
 mjers-tile = { path = "mjers-tile" }
 mjers-hand = { path = "mjers-hand" }
 mjers-rules = { path = "mjers-rules" }
@@ -53,7 +51,12 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-mjers.workspace = true
+mjers-tile.workspace = true
+mjers-hand.workspace = true
+mjers-rules.workspace = true
+mjers-game.workspace = true
+mjers-bot.workspace = true
+mjers-advisor.workspace = true
 mjers-sim.workspace = true
 serde.workspace = true
 serde_json.workspace = true

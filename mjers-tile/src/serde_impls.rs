@@ -12,10 +12,10 @@ use serde::{
     Serializer,
 };
 
-use crate::{
+use crate::counts::TileCounts;
+use crate::tile::{
     Bonus,
     Tile,
-    TileCounts,
 };
 
 fn serialize_display<T: Display, S: Serializer>(

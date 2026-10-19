@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Context;
-use mjers::game::{
-    Seat,
-    Trace,
-};
-use mjers::rules::Ruleset;
-use mjers_sim::play_hand;
+use mjers_game::trace::Trace;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_sim::runner::play_hand;
 
 use super::load;
 use super::play::print_events;

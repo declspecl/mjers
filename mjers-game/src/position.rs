@@ -2,16 +2,14 @@
 
 use std::sync::Arc;
 
-use mjers_hand::Hand;
-use mjers_rules::{
-    Ruleset,
+use mjers_hand::hand::Hand;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::{
     SEATS,
     Seat,
 };
-use mjers_tile::{
-    Tile,
-    TileCounts,
-};
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::Tile;
 
 use crate::action::{
     Offer,

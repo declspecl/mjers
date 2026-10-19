@@ -5,12 +5,10 @@ use criterion::{
     criterion_group,
     criterion_main,
 };
-use mjers_hand::{
-    is_complete,
-    shanten,
-    ukeire::discard_options,
-};
-use mjers_tile::TileCounts;
+use mjers_hand::shanten::shanten;
+use mjers_hand::ukeire::discard_options;
+use mjers_hand::win::is_complete;
+use mjers_tile::counts::TileCounts;
 
 /// A spread of shapes: complete, ready, mid-game, and scattered starting hands.
 const HANDS: [&str; 4] = ["123m456p789s11122z", "1112345678999m5p", "13579m2468p13s15z", "19m19p19s12345677z"];

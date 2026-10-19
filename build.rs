@@ -3,12 +3,11 @@
 
 use std::process::Command;
 
-const SOURCES: [&str; 13] = [
+const SOURCES: [&str; 12] = [
     "src",
     "build.rs",
     "Cargo.toml",
     "Cargo.lock",
-    "mjers",
     "mjers-tile",
     "mjers-hand",
     "mjers-rules",

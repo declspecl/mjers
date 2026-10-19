@@ -1,5 +1,5 @@
 use super::*;
-use crate::Ruleset;
+use crate::ruleset::Ruleset;
 
 const S: [Seat; SEATS] = Seat::ALL;
 

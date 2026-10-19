@@ -5,39 +5,37 @@
 //! Everything is observational: it describes how these bots' hands turn out,
 //! not what would happen if a player changed course.
 
-mod composition;
+pub mod composition;
 #[cfg(test)]
 mod tests;
-
-pub use composition::Composition;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use mjers_bot::heuristic::connectivity;
-use mjers_game::{
-    Event,
-    Game,
-    Ruleset,
-    Seat,
-};
-use mjers_hand::wait::wait_shapes;
-use mjers_hand::{
-    Hand,
+use mjers_game::game::Game;
+use mjers_game::trace::Event;
+use mjers_hand::hand::Hand;
+use mjers_hand::meld::{
     KongKind,
     Meld,
-    WaitShape,
-    decompose,
 };
-use mjers_rules::WinSource;
-use mjers_tile::counts::COPIES;
+use mjers_hand::wait::{
+    WaitShape,
+    wait_shapes,
+};
+use mjers_hand::win::decompose;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::WinSource;
+use mjers_tile::counts::{
+    COPIES,
+    TileCounts,
+};
 use mjers_tile::tile::{
     KINDS,
     SUITED_KINDS,
-};
-use mjers_tile::{
     Tile,
-    TileCounts,
 };
 use rayon::prelude::*;
 use serde::{
@@ -189,7 +187,7 @@ pub struct Study {
     pub ready_live: BTreeMap<u32, Tally>,
     /// Seats by how many different tiles they waited on when first ready.
     pub ready_waits: BTreeMap<String, Tally>,
-    pub composition: Composition,
+    pub composition: composition::Composition,
 }
 
 impl Study {

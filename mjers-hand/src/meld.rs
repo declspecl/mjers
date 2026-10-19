@@ -1,9 +1,7 @@
 //! Declared sets that sit beside a hand.
 
-use mjers_tile::{
-    Tile,
-    TileCounts,
-};
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,
@@ -60,7 +58,7 @@ impl Meld {
 
 #[cfg(test)]
 mod tests {
-    use mjers_tile::{
+    use mjers_tile::tile::{
         Honor,
         Suit,
     };

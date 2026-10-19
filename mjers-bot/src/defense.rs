@@ -3,15 +3,15 @@
 //! Every estimate uses only what the deciding seat can see: its own hand,
 //! public tiles, and each opponent's melds and discards.
 
-use mjers_game::{
-    Observation,
-    Seat,
-};
-use mjers_tile::counts::COPIES;
-use mjers_tile::tile::SUITED_KINDS;
-use mjers_tile::{
-    Tile,
+use mjers_game::observation::Observation;
+use mjers_rules::seat::Seat;
+use mjers_tile::counts::{
+    COPIES,
     TileCounts,
+};
+use mjers_tile::tile::{
+    SUITED_KINDS,
+    Tile,
 };
 
 /// Rough chance an opponent is ready: grows with exposed melds and with how
@@ -142,11 +142,9 @@ mod tests {
 mod passed_tests {
     use std::sync::Arc;
 
-    use mjers_game::{
-        Action,
-        Game,
-        Ruleset,
-    };
+    use mjers_game::action::Action;
+    use mjers_game::game::Game;
+    use mjers_rules::ruleset::Ruleset;
 
     use super::*;
 

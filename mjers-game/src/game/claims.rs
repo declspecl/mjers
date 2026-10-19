@@ -1,14 +1,14 @@
 //! The claim window after a discard.
 
-use mjers_hand::Meld;
-use mjers_rules::{
+use mjers_hand::meld::Meld;
+use mjers_rules::seat::Seat;
+use mjers_rules::settlement::{
     HandResult,
     Kong,
-    Seat,
     Win,
     WinSource,
 };
-use mjers_tile::Tile;
+use mjers_tile::tile::Tile;
 
 use super::Game;
 use crate::action::{
@@ -26,8 +26,8 @@ impl Game {
         from: Seat,
         offer: Offer,
     ) {
-        self.decisions = [None; mjers_rules::SEATS];
-        self.asked = [false; mjers_rules::SEATS];
+        self.decisions = [None; mjers_rules::seat::SEATS];
+        self.asked = [false; mjers_rules::seat::SEATS];
         for seat in from.others() {
             self.asked[seat.index()] = !self.claim_options(seat, tile, from, offer).is_empty();
         }
@@ -181,7 +181,7 @@ impl Game {
 
     /// Every declared kong at the table.
     pub(super) fn kongs(&self) -> Vec<Kong> {
-        mjers_rules::Seat::ALL
+        mjers_rules::seat::Seat::ALL
             .iter()
             .flat_map(|&owner| {
                 self.hand(owner).melds().filter_map(move |m| match m {

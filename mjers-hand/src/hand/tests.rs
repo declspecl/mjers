@@ -1,4 +1,4 @@
-use mjers_tile::{
+use mjers_tile::tile::{
     Honor,
     Suit,
 };

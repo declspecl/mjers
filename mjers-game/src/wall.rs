@@ -7,12 +7,11 @@
 #[cfg(test)]
 mod tests;
 
-use mjers_tile::{
+use mjers_tile::counts::COPIES;
+use mjers_tile::tile::{
     Bonus,
     Tile,
-    counts::COPIES,
 };
-
 use serde::{
     Deserialize,
     Serialize,

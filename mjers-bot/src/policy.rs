@@ -1,12 +1,10 @@
 //! The interface every player implements, and a driver that plays a hand.
 
-use mjers_game::{
-    Action,
-    Game,
-    Observation,
-    Rng,
-    Seat,
-};
+use mjers_game::action::Action;
+use mjers_game::game::Game;
+use mjers_game::observation::Observation;
+use mjers_game::rng::Rng;
+use mjers_rules::seat::Seat;
 
 /// Chooses an action from what one seat can see.
 ///
@@ -73,7 +71,7 @@ pub fn decide(
 mod tests {
     use std::sync::Arc;
 
-    use mjers_game::Ruleset;
+    use mjers_rules::ruleset::Ruleset;
 
     use super::*;
 

@@ -2,14 +2,12 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers::bot::BotSpec;
+use mjers_bot::spec::BotSpec;
+use mjers_sim::report::Report;
+use mjers_sim::runner::Seeds;
 use mjers_sim::tune::{
     TuneConfig,
     tune,
-};
-use mjers_sim::{
-    Report,
-    Seeds,
 };
 
 use super::sim::{

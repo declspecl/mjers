@@ -1,9 +1,7 @@
 //! Classifying how the winning tile completed a hand.
 
-use mjers_tile::{
-    Tile,
-    TileCounts,
-};
+use mjers_tile::counts::TileCounts;
+use mjers_tile::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,

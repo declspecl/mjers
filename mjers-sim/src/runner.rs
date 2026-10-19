@@ -2,17 +2,15 @@
 
 use std::sync::Arc;
 
-use mjers_bot::{
-    BotSpec,
+use mjers_bot::policy::{
     decide,
     play_out,
 };
+use mjers_bot::spec::BotSpec;
+use mjers_game::game::Game;
 use mjers_game::rng::derive_seed;
-use mjers_game::{
-    Game,
-    Ruleset,
-    Seat,
-};
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::Seat;
 use rayon::prelude::*;
 use serde::{
     Deserialize,
@@ -66,7 +64,7 @@ pub fn play_hand_watched(
 ) -> Game {
     let dealer = Seat::ALL[(seed % 4) as usize];
     let mut game = Game::new(rules.clone(), seed, dealer);
-    let mut policies: [Box<dyn mjers_bot::Policy>; 4] = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
+    let mut policies: [Box<dyn mjers_bot::policy::Policy>; 4] = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
     watch(&game);
     while let Some(&seat) = game.to_act().first() {
         let action = decide(&game, seat, &mut *policies[seat.index()]);

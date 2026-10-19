@@ -1,10 +1,8 @@
 //! The advisor: instant ranking, refined by playouts when asked.
 
-use mjers_bot::BotSpec;
-use mjers_game::{
-    Action,
-    Observation,
-};
+use mjers_bot::spec::BotSpec;
+use mjers_game::action::Action;
+use mjers_game::observation::Observation;
 use serde::{
     Deserialize,
     Serialize,
@@ -88,11 +86,9 @@ pub fn advise(
 mod tests {
     use std::sync::Arc;
 
-    use mjers_game::{
-        Game,
-        Ruleset,
-        Seat,
-    };
+    use mjers_game::game::Game;
+    use mjers_rules::ruleset::Ruleset;
+    use mjers_rules::seat::Seat;
 
     use super::*;
 
