@@ -12,4 +12,9 @@ mjers-tile.workspace = true
 workspace = true
 
 [dev-dependencies]
+criterion = "0.8"
 proptest = "1"
+
+[[bench]]
+name = "hand"
+harness = false
