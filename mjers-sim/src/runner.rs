@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use mjers_bot::{
     BotSpec,
+    decide,
     play_out,
 };
 use mjers_game::rng::derive_seed;
@@ -53,6 +54,25 @@ pub fn play_hand(
     let mut game = Game::new(rules.clone(), seed, dealer);
     let mut policies = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
     play_out(&mut game, &mut policies);
+    game
+}
+
+/// Like `play_hand`, calling `watch` after the deal and after every action.
+pub fn play_hand_watched(
+    rules: &Arc<Ruleset>,
+    table: &Table,
+    seed: u64,
+    mut watch: impl FnMut(&Game),
+) -> Game {
+    let dealer = Seat::ALL[(seed % 4) as usize];
+    let mut game = Game::new(rules.clone(), seed, dealer);
+    let mut policies: [Box<dyn mjers_bot::Policy>; 4] = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
+    watch(&game);
+    while let Some(&seat) = game.to_act().first() {
+        let action = decide(&game, seat, &mut *policies[seat.index()]);
+        game.apply(seat, action).expect("policies choose legal actions");
+        watch(&game);
+    }
     game
 }
 
