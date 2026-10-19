@@ -1,0 +1,15 @@
+{
+  "kind": "heuristic",
+  "name": "tuned-family",
+  "params": {
+    "chow": "when_improves",
+    "pong": "when_improves",
+    "exposed_kong": "when_free",
+    "concealed_kong": "always",
+    "upgrade_kong": "always",
+    "claim_max_shanten": 8,
+    "caution": 0.0,
+    "fold_shanten": 8,
+    "fold_readiness": 2.0
+  }
+}
