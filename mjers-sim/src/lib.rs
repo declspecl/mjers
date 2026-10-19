@@ -1,6 +1,7 @@
 //! Batch simulation, comparison, and reports.
 
 pub mod compare;
+pub mod features;
 pub mod report;
 pub mod runner;
 pub mod stats;
@@ -8,6 +9,11 @@ pub mod stats;
 pub use compare::{
     Comparison,
     compare,
+};
+pub use features::{
+    HandFeatures,
+    Outcome,
+    write_features,
 };
 pub use report::{
     ComparisonResult,

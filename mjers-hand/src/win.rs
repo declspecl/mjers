@@ -49,6 +49,14 @@ pub fn waits(
     Tile::all().filter(|&t| concealed.get(t) < COPIES && is_complete(&concealed.with(t), melds)).collect()
 }
 
+/// Whether `tiles` form exactly `sets` sets with no eye.
+pub(crate) fn forms_sets(
+    tiles: &TileCounts,
+    sets: usize,
+) -> bool {
+    tiles.len() == 3 * sets && decomposes_into_sets(&mut tiles.as_array().clone())
+}
+
 /// Greedily strips sets from the lowest tile upward.
 ///
 /// Taking a pong first is safe: three identical chows from the lowest tile

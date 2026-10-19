@@ -4,6 +4,7 @@ pub mod hand;
 pub mod meld;
 pub mod shanten;
 pub mod ukeire;
+pub mod wait;
 pub mod win;
 
 pub use hand::{
@@ -21,6 +22,7 @@ pub use ukeire::{
     Improvement,
     Ukeire,
 };
+pub use wait::WaitShape;
 pub use win::{
     is_complete,
     waits,
