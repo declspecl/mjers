@@ -2,6 +2,7 @@
 
 pub mod action;
 pub mod game;
+pub mod observation;
 pub mod rng;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -21,6 +22,10 @@ pub use mjers_rules::{
     HandResult,
     Ruleset,
     Seat,
+};
+pub use observation::{
+    Decision,
+    Observation,
 };
 pub use rng::Rng;
 pub use wall::{
