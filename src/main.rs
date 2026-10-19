@@ -1,3 +1,9 @@
-fn main() {
-    println!("mjers {}", env!("CARGO_PKG_VERSION"));
+//! `mj`: analyse hands, play against bots, and run experiments.
+
+mod cli;
+
+use clap::Parser;
+
+fn main() -> anyhow::Result<()> {
+    cli::Cli::parse().run()
 }
