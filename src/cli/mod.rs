@@ -1,3 +1,4 @@
+mod advise;
 mod analyze;
 mod compare;
 mod load;
@@ -23,6 +24,8 @@ pub struct Cli {
 enum Command {
     /// Shanten, improving tiles, and discard ranking for a hand.
     Analyze(analyze::Args),
+    /// Recommend and explain the best action at a decision.
+    Advise(advise::Args),
     /// Play a hand in the terminal against bots.
     Play(play::Args),
     /// Simulate many hands and report outcome metrics.
@@ -41,6 +44,7 @@ impl Cli {
     pub fn run(self) -> anyhow::Result<()> {
         match self.command {
             Command::Analyze(args) => analyze::run(args),
+            Command::Advise(args) => advise::run(args),
             Command::Play(args) => play::run(args),
             Command::Sim(args) => sim::run(args),
             Command::Compare(args) => compare::run(args),

@@ -102,6 +102,10 @@ pub struct Estimate {
     pub ev_stderr: f64,
     pub win_rate: f64,
     pub deal_in_rate: f64,
+    /// Mean of this action's units minus the first candidate's, on the same
+    /// samples, and its standard error. Zero for the first candidate.
+    pub difference: f64,
+    pub difference_stderr: f64,
 }
 
 /// Plays each of `actions` out from `samples` sampled positions.
@@ -116,8 +120,7 @@ pub fn estimate(
     let rules = Arc::new(obs.rules().clone());
     #[derive(Default, Clone)]
     struct Tally {
-        sum: f64,
-        sum_squared: f64,
+        units: Vec<f64>,
         wins: u32,
         deal_ins: u32,
     }
@@ -130,8 +133,7 @@ pub fn estimate(
             let mut policies = std::array::from_fn(|k| rollout.build(derive_seed(seed ^ 0x5EED, i * 4 + k as u64)));
             play_out(&mut game, &mut policies);
             let units = game.settlement().expect("over").total()[seat.index()] as f64;
-            tally.sum += units;
-            tally.sum_squared += units * units;
+            tally.units.push(units);
             if let Some(win) = game.result().expect("over").win {
                 tally.wins += (win.winner == seat) as u32;
                 tally.deal_ins += (win.source == WinSource::Discard(seat)) as u32;
@@ -139,22 +141,32 @@ pub fn estimate(
         }
     }
     let n = samples.max(1) as f64;
+    let first = tallies.first().map(|t| t.units.clone()).unwrap_or_default();
     actions
         .iter()
-        .zip(tallies)
+        .zip(&tallies)
         .map(|(&action, t)| {
-            let ev = t.sum / n;
-            let variance = (t.sum_squared / n - ev * ev).max(0.0) * n / (n - 1.0).max(1.0);
+            let (ev, ev_stderr) = mean_and_stderr(t.units.iter().copied());
+            let (difference, difference_stderr) = mean_and_stderr(t.units.iter().zip(&first).map(|(a, b)| a - b));
             Estimate {
                 action,
                 samples,
                 ev,
-                ev_stderr: (variance / n).sqrt(),
+                ev_stderr,
                 win_rate: t.wins as f64 / n,
                 deal_in_rate: t.deal_ins as f64 / n,
+                difference,
+                difference_stderr,
             }
         })
         .collect()
+}
+
+fn mean_and_stderr(values: impl Iterator<Item = f64> + Clone) -> (f64, f64) {
+    let n = values.clone().count().max(1) as f64;
+    let mean = values.clone().sum::<f64>() / n;
+    let variance = values.map(|v| (v - mean) * (v - mean)).sum::<f64>() / (n - 1.0).max(1.0);
+    (mean, (variance / n).sqrt())
 }
 
 #[cfg(test)]

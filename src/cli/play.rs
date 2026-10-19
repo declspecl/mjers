@@ -8,8 +8,11 @@ use anyhow::{
     Context,
     bail,
 };
+use mjers::advisor::{
+    AdviceConfig,
+    advise,
+};
 use mjers::bot::{
-    HeuristicBot,
     Policy,
     decide,
 };
@@ -22,6 +25,7 @@ use mjers::game::{
 };
 use mjers::rules::WinSource;
 
+use super::advise::print_advice;
 use super::load;
 
 #[derive(clap::Args)]
@@ -38,9 +42,12 @@ pub struct Args {
     /// Opponent strategy preset or JSON file.
     #[arg(long, default_value = "efficiency")]
     opponents: String,
-    /// Show the efficiency bot's choice at each decision.
+    /// Show the advisor's top choices and reasons at each decision.
     #[arg(long)]
     hint: bool,
+    /// Playouts per candidate for hints; 0 for instant hints.
+    #[arg(long, default_value_t = 0)]
+    hint_samples: u32,
     /// Let a bot play your seat too and show every tile.
     #[arg(long)]
     watch: bool,
@@ -64,7 +71,12 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         let action = if Some(seat) == viewer {
             show_state(&game, seat);
             if args.hint {
-                println!("hint: {}", decide(&game, seat, &mut HeuristicBot::efficiency()));
+                let config = AdviceConfig {
+                    samples: args.hint_samples,
+                    seed,
+                    ..AdviceConfig::default()
+                };
+                print_advice(&advise(&game.observe(seat), &config), 3);
             }
             prompt(&game, seat, &mut lines)?
         } else {

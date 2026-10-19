@@ -61,7 +61,7 @@ fn interactive_play_accepts_tile_input() {
     let input = "0\n".repeat(200);
     let out = mj(&["play", "--seed", "3", "--hint"], &input);
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.contains("hint: "), "{text}");
+    assert!(text.contains("recommended: "), "{text}");
     assert!(text.contains("you:  "), "{text}");
 }
 
@@ -137,5 +137,26 @@ fn tune_writes_a_loadable_strategy() {
     let spec: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(spec["name"], "tuned");
     stdout(&mj(&["compare", path.to_str().unwrap(), "efficiency", "--hands", "10"], ""));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn advise_explains_a_bot_hand_decision() {
+    let out = stdout(&mj(&["advise", "--seed", "2", "--step", "9", "--samples", "20", "--candidates", "3"], ""));
+    assert!(out.contains("playouts"), "{out}");
+    assert!(out.contains("recommended: "), "{out}");
+    assert!(out.contains("live"), "{out}");
+}
+
+#[test]
+fn advise_reads_traces() {
+    let trace = stdout(&mj(&["trace", "--seed", "8"], ""));
+    let dir = std::env::temp_dir().join(format!("mj-advise-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("trace.json");
+    std::fs::write(&path, trace).unwrap();
+    let out = stdout(&mj(&["advise", "--trace", path.to_str().unwrap(), "--step", "4", "--samples", "0", "--json"], ""));
+    let advice: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert!(!advice["ranked"].as_array().unwrap().is_empty());
     std::fs::remove_dir_all(dir).unwrap();
 }

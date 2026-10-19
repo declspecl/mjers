@@ -45,14 +45,20 @@ impl Default for AdviceConfig {
 pub struct Advice {
     /// Every legal action, best first by the instant heuristic.
     pub ranked: Vec<Assessment>,
-    /// Playout estimates for the top candidates, highest EV first.
+    /// Playout estimates for the top candidates, highest EV first. Each
+    /// carries its paired difference from the top-ranked action.
     pub estimates: Vec<Estimate>,
 }
 
 impl Advice {
-    /// The recommended action: best estimate if any, else best ranked.
+    /// The top-ranked action, unless playouts show another beating it by more
+    /// than one standard error of the paired difference.
     pub fn best(&self) -> Action {
-        self.estimates.first().map_or(self.ranked[0].action, |e| e.action)
+        self.estimates
+            .iter()
+            .filter(|e| e.difference - e.difference_stderr > 0.0)
+            .max_by(|a, b| a.difference.total_cmp(&b.difference))
+            .map_or(self.ranked[0].action, |e| e.action)
     }
 
     pub fn assessment(
@@ -118,5 +124,53 @@ mod tests {
         );
         assert!(advice.estimates.is_empty());
         assert_eq!(advice.best(), advice.ranked[0].action);
+    }
+}
+
+#[cfg(test)]
+mod best_tests {
+    use super::*;
+    use crate::montecarlo::Estimate;
+
+    fn estimate(
+        action: Action,
+        difference: f64,
+        difference_stderr: f64,
+    ) -> Estimate {
+        Estimate {
+            action,
+            samples: 100,
+            ev: difference,
+            ev_stderr: 1.0,
+            win_rate: 0.0,
+            deal_in_rate: 0.0,
+            difference,
+            difference_stderr,
+        }
+    }
+
+    fn advice(estimates: Vec<Estimate>) -> Advice {
+        let tile = |s: &str| s.parse().unwrap();
+        let ranked = ["1m", "2m"]
+            .iter()
+            .map(|t| Assessment {
+                action: Action::Discard(tile(t)),
+                shanten: 1,
+                live_improving: 0,
+                danger: 0.0,
+                immediate_units: 0,
+                reasons: vec![],
+            })
+            .collect();
+        Advice { ranked, estimates }
+    }
+
+    #[test]
+    fn noise_does_not_override_the_ranking() {
+        let second = Action::Discard("2m".parse().unwrap());
+        let a = advice(vec![estimate(second, 0.3, 0.4), estimate(Action::Discard("1m".parse().unwrap()), 0.0, 0.0)]);
+        assert_eq!(a.best(), Action::Discard("1m".parse().unwrap()));
+        let b = advice(vec![estimate(second, 0.9, 0.4)]);
+        assert_eq!(b.best(), second);
     }
 }
