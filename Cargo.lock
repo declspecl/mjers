@@ -463,6 +463,8 @@ dependencies = [
  "mjers-hand",
  "mjers-rules",
  "mjers-tile",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -472,6 +474,7 @@ dependencies = [
  "criterion",
  "mjers-tile",
  "proptest",
+ "serde",
 ]
 
 [[package]]
@@ -496,6 +499,10 @@ dependencies = [
 [[package]]
 name = "mjers-tile"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "num-traits"

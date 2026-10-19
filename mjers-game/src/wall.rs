@@ -13,11 +13,17 @@ use mjers_tile::{
     counts::COPIES,
 };
 
+use serde::{
+    Deserialize,
+    Serialize,
+};
+
 use crate::rng::Rng;
 
 pub const WALL_SIZE: usize = 144;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum WallTile {
     Tile(Tile),
     Bonus(Bonus),

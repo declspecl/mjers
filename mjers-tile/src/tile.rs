@@ -183,3 +183,34 @@ impl Bonus {
         (1..=4).map(Bonus::Flower).chain((1..=4).map(Bonus::Season))
     }
 }
+
+impl fmt::Display for Bonus {
+    /// `1F`..`4F` for flowers, `1S`..`4S` for seasons.
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        match self {
+            Bonus::Flower(n) => write!(f, "{n}F"),
+            Bonus::Season(n) => write!(f, "{n}S"),
+        }
+    }
+}
+
+impl FromStr for Bonus {
+    type Err = ParseTileError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let err = || ParseTileError(s.to_string());
+        let mut chars = s.chars();
+        let (Some(digit), Some(letter), None) = (chars.next(), chars.next(), chars.next()) else {
+            return Err(err());
+        };
+        let n = digit.to_digit(10).filter(|n| (1..=4).contains(n)).ok_or_else(err)? as u8;
+        match letter {
+            'F' => Ok(Bonus::Flower(n)),
+            'S' => Ok(Bonus::Season(n)),
+            _ => Err(err()),
+        }
+    }
+}

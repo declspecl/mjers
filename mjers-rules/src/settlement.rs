@@ -33,7 +33,6 @@ pub struct Win {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Kong {
     pub owner: Seat,
-    #[serde(with = "kong_kind")]
     pub kind: KongKind,
 }
 
@@ -98,32 +97,4 @@ fn transfer(
 ) {
     deltas[from.index()] -= amount as i32;
     deltas[to.index()] += amount as i32;
-}
-
-/// `KongKind` lives in a crate without serde; serialize it as a string.
-mod kong_kind {
-    use mjers_hand::KongKind;
-    use serde::{
-        Deserialize,
-        Deserializer,
-        Serializer,
-    };
-
-    pub fn serialize<S: Serializer>(
-        kind: &KongKind,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(match kind {
-            KongKind::Exposed => "exposed",
-            KongKind::Concealed => "concealed",
-        })
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<KongKind, D::Error> {
-        match String::deserialize(deserializer)?.as_str() {
-            "exposed" => Ok(KongKind::Exposed),
-            "concealed" => Ok(KongKind::Concealed),
-            other => Err(serde::de::Error::unknown_variant(other, &["exposed", "concealed"])),
-        }
-    }
 }

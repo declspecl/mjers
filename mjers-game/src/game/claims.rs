@@ -16,6 +16,7 @@ use crate::action::{
     Offer,
     Phase,
 };
+use crate::trace::Event;
 
 impl Game {
     /// Offers `tile` to every seat that could use it, or moves on if none can.
@@ -140,6 +141,8 @@ impl Game {
         claimed: Tile,
     ) {
         self.mark_last_discard_claimed();
+        let from = self.discards.last().expect("a discard was claimed").seat;
+        self.events.push(Event::Claim { seat, from, meld });
         let mut revealed = meld.tiles();
         revealed.remove(claimed);
         for tile in revealed.tiles() {
@@ -163,6 +166,7 @@ impl Game {
             source,
             bonus_tiles: self.hand(winner).bonus().len(),
         };
+        self.events.push(Event::Win { seat: winner, source });
         let result = HandResult { win: Some(win), kongs: self.kongs() };
         self.end(result);
     }

@@ -6,6 +6,7 @@ pub mod observation;
 pub mod rng;
 #[cfg(test)]
 pub(crate) mod testing;
+pub mod trace;
 pub mod wall;
 
 pub use action::{
@@ -28,6 +29,12 @@ pub use observation::{
     Observation,
 };
 pub use rng::Rng;
+pub use trace::{
+    Event,
+    ReplayError,
+    Step,
+    Trace,
+};
 pub use wall::{
     Wall,
     WallTile,

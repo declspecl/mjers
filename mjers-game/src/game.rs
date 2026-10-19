@@ -25,6 +25,11 @@ use mjers_tile::{
     TileCounts,
 };
 
+use serde::{
+    Deserialize,
+    Serialize,
+};
+
 use crate::action::{
     Action,
     GameError,
@@ -32,6 +37,10 @@ use crate::action::{
     Phase,
 };
 use crate::rng::Rng;
+use crate::trace::{
+    Event,
+    Step,
+};
 use crate::wall::{
     Wall,
     WallTile,
@@ -39,7 +48,7 @@ use crate::wall::{
 
 pub const DEALT_TILES: usize = 13;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Discard {
     pub seat: Seat,
     pub tile: Tile,
@@ -62,6 +71,10 @@ pub struct Game {
     /// In a claim window: seats with an option, and what each has chosen.
     asked: [bool; SEATS],
     decisions: [Option<Action>; SEATS],
+    seed: Option<u64>,
+    initial_wall: Arc<Wall>,
+    steps: Vec<Step>,
+    events: Vec<Event>,
 }
 
 impl Game {
@@ -72,7 +85,9 @@ impl Game {
         dealer: Seat,
     ) -> Game {
         let wall = Wall::shuffled(&mut Rng::seed(seed), rules.reserved_tiles());
-        Game::from_wall(rules, wall, dealer)
+        let mut game = Game::from_wall(rules, wall, dealer);
+        game.seed = Some(seed);
+        game
     }
 
     /// Deals from a wall in a known order.
@@ -84,6 +99,7 @@ impl Game {
         mut wall: Wall,
         dealer: Seat,
     ) -> Game {
+        let initial_wall = Arc::new(wall.clone());
         let order: Vec<Seat> = std::iter::once(dealer).chain(dealer.others()).collect();
         let mut dealt: [Vec<WallTile>; SEATS] = Default::default();
         for take in [4, 4, 4, 1] {
@@ -104,6 +120,10 @@ impl Game {
             last_draw: None,
             asked: [false; SEATS],
             decisions: [None; SEATS],
+            seed: None,
+            initial_wall,
+            steps: Vec::new(),
+            events: Vec::new(),
         };
         for &seat in &order {
             for tile in std::mem::take(&mut dealt[seat.index()]) {
@@ -111,6 +131,10 @@ impl Game {
                     return game;
                 }
             }
+        }
+        for &seat in &order {
+            let tiles = *game.hand(seat).concealed();
+            game.events.push(Event::Deal { seat, tiles });
         }
         game.start_turn(dealer, false);
         game
@@ -171,18 +195,21 @@ impl Game {
         if !self.legal_actions(seat).contains(&action) {
             return Err(GameError::Illegal { seat, action });
         }
+        self.steps.push(Step { seat, action });
         match action {
             Action::Discard(tile) => self.discard(seat, tile),
             Action::SelfDrawWin => self.end_with_win(seat, WinSource::SelfDraw),
             Action::ConcealedKong(tile) => {
-                self.hands[seat.index()].declare_concealed_kong(tile).expect("kong was legal");
+                let meld = self.hands[seat.index()].declare_concealed_kong(tile).expect("kong was legal");
+                self.events.push(Event::Kong { seat, meld });
                 for _ in 0..COPIES {
                     self.public.add(tile);
                 }
                 self.start_turn(seat, true);
             },
             Action::UpgradeKong(tile) => {
-                self.hands[seat.index()].upgrade_kong(tile).expect("upgrade was legal");
+                let meld = self.hands[seat.index()].upgrade_kong(tile).expect("upgrade was legal");
+                self.events.push(Event::Kong { seat, meld });
                 self.public.add(tile);
                 self.start_turn(seat, true);
             },
@@ -198,6 +225,7 @@ impl Game {
     ) {
         self.hands[seat.index()].discard(tile).expect("legal discards are held");
         self.discards.push(Discard { seat, tile, claimed: false });
+        self.events.push(Event::Discard { seat, tile });
         self.public.add(tile);
         self.open_claims(tile, seat, Offer::Discard);
     }
@@ -216,6 +244,7 @@ impl Game {
             return;
         };
         if let Some(drawn) = self.receive(seat, next) {
+            self.events.push(Event::Draw { seat, tile: drawn });
             self.last_draw = Some(drawn);
             self.phase = Phase::Turn { seat, after_claim: false };
         }
@@ -237,6 +266,7 @@ impl Game {
                 },
                 WallTile::Bonus(b) => {
                     self.hands[seat.index()].add_bonus(b);
+                    self.events.push(Event::Bonus { seat, bonus: b });
                     match self.wall.draw_replacement() {
                         Some(next) => tile = next,
                         None => {
@@ -259,6 +289,7 @@ impl Game {
     /// The wall ran out: no winner, but kongs still count.
     fn end_exhausted(&mut self) {
         let result = HandResult { win: None, kongs: self.kongs() };
+        self.events.push(Event::Exhausted);
         self.end(result);
     }
 
@@ -312,5 +343,23 @@ impl Game {
 
     pub fn wall(&self) -> &Wall {
         &self.wall
+    }
+
+    pub fn seed(&self) -> Option<u64> {
+        self.seed
+    }
+
+    /// The wall as it was before the deal.
+    pub fn initial_wall(&self) -> &Wall {
+        &self.initial_wall
+    }
+
+    /// Every applied action, in order.
+    pub fn steps(&self) -> &[Step] {
+        &self.steps
+    }
+
+    pub fn events(&self) -> &[Event] {
+        &self.events
     }
 }

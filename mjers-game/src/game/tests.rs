@@ -299,3 +299,58 @@ fn kongs_are_paid_when_the_wall_runs_out() {
     }));
     assert_eq!(game.settlement().unwrap().kongs[0], 6 * result.kongs.iter().filter(|k| k.owner == S[0]).count() as i32);
 }
+
+/// Plays a seeded hand with a fixed, simple policy: win when possible, pong
+/// and kong when offered, otherwise pass or discard the drawn tile.
+pub(crate) fn play_greedy(seed: u64) -> Game {
+    let mut game = Game::new(family(), seed, S[(seed % 4) as usize]);
+    while let Some(&seat) = game.to_act().first() {
+        let legal = game.legal_actions(seat);
+        let preferred = [Action::Win, Action::SelfDrawWin, Action::Kong, Action::Pong];
+        let action = preferred
+            .into_iter()
+            .find(|a| legal.contains(a))
+            .or_else(|| legal.iter().copied().find(|a| matches!(a, Action::ConcealedKong(_) | Action::UpgradeKong(_) | Action::Chow(_))))
+            .or_else(|| game.last_draw().map(Action::Discard).filter(|a| legal.contains(a)))
+            .unwrap_or_else(|| *legal.last().unwrap());
+        game.apply(seat, action).unwrap();
+    }
+    game
+}
+
+#[test]
+fn traces_replay_exactly_through_json() {
+    for seed in 0..40 {
+        let game = play_greedy(seed);
+        let trace = game.trace();
+        let json = serde_json::to_string(&trace).unwrap();
+        let parsed: crate::Trace = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, trace, "seed {seed}");
+        let replayed = parsed.replay().unwrap();
+        assert_eq!(replayed.result(), game.result());
+        assert_eq!(replayed.settlement(), game.settlement());
+    }
+}
+
+#[test]
+fn tampered_traces_are_rejected() {
+    let mut trace = play_greedy(1).trace();
+    trace.wall.swap(60, 61);
+    trace.wall.swap(70, 90);
+    assert!(trace.replay().is_err());
+    let mut short = play_greedy(1).trace();
+    short.wall.pop();
+    assert_eq!(short.replay().unwrap_err(), crate::ReplayError::Wall(143));
+}
+
+#[test]
+fn events_tell_the_story() {
+    let game = play_greedy(5);
+    let events = game.events();
+    assert_eq!(events.iter().filter(|e| matches!(e, crate::Event::Deal { .. })).count(), 4);
+    let discards = events.iter().filter(|e| matches!(e, crate::Event::Discard { .. })).count();
+    assert_eq!(discards, game.discards().len());
+    assert!(matches!(events.last(), Some(crate::Event::Win { .. } | crate::Event::Exhausted)));
+    let deal = events.iter().find(|e| matches!(e, crate::Event::Deal { .. })).unwrap();
+    assert!(serde_json::to_string(deal).unwrap().contains("\"event\":\"deal\""));
+}

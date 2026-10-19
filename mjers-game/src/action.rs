@@ -7,9 +7,14 @@ use mjers_rules::{
     Seat,
 };
 use mjers_tile::Tile;
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
 /// Everything a player can choose. Draws and flower replacements are automatic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Action {
     /// On your turn: discard a tile.
     Discard(Tile),
@@ -51,7 +56,8 @@ impl fmt::Display for Action {
 }
 
 /// Where a claimable tile came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Offer {
     Discard,
     /// The tile being added to an exposed pong (robbing the kong).

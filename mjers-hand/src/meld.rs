@@ -4,8 +4,13 @@ use mjers_tile::{
     Tile,
     TileCounts,
 };
+use serde::{
+    Deserialize,
+    Serialize,
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum KongKind {
     /// Claimed from a discard, or an exposed pong upgraded with a drawn tile.
     Exposed,
@@ -13,7 +18,8 @@ pub enum KongKind {
     Concealed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Meld {
     /// Identified by its lowest tile.
     Chow(Tile),
