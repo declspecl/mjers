@@ -83,7 +83,7 @@ fn clock_seed() -> u64 {
 }
 
 /// Prints events from `from` onward as `viewer` may see them; returns the new count.
-fn print_events(
+pub fn print_events(
     game: &Game,
     from: usize,
     viewer: Option<Seat>,

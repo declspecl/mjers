@@ -71,3 +71,58 @@ fn unknown_rules_fail_clearly() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("not a preset"));
 }
+
+#[test]
+fn sim_prints_metrics_by_strategy_and_position() {
+    let out = stdout(&mj(&["sim", "--hands", "200", "--seats", "efficiency,defensive,efficiency,random"], ""));
+    for label in ["defensive", "efficiency", "random", "dealer+3", "ev ± se"] {
+        assert!(out.contains(label), "{label}: {out}");
+    }
+}
+
+#[test]
+fn sim_json_report_has_provenance() {
+    let out = stdout(&mj(&["sim", "--hands", "50", "--json"], ""));
+    let report: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(report["schema"], 1);
+    assert_eq!(report["kind"], "simulation");
+    assert_eq!(report["provenance"]["revision"].as_str().unwrap().len(), 40);
+    assert_eq!(report["strategies"].as_array().unwrap().len(), 4);
+}
+
+#[test]
+fn sim_writes_feature_rows() {
+    let dir = std::env::temp_dir().join(format!("mj-features-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("rows.jsonl");
+    stdout(&mj(&["sim", "--hands", "25", "--features", path.to_str().unwrap()], ""));
+    assert_eq!(std::fs::read_to_string(&path).unwrap().lines().count(), 100);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn compare_reports_a_difference() {
+    let out = stdout(&mj(&["compare", "efficiency", "random", "--hands", "100"], ""));
+    assert!(out.contains("difference +"), "{out}");
+    assert!(out.contains("z = "), "{out}");
+}
+
+#[test]
+fn traces_replay_through_the_cli() {
+    let trace = stdout(&mj(&["trace", "--seed", "4"], ""));
+    let dir = std::env::temp_dir().join(format!("mj-trace-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("trace.json");
+    std::fs::write(&path, trace).unwrap();
+    let out = stdout(&mj(&["replay", path.to_str().unwrap()], ""));
+    assert!(out.contains("replayed"), "{out}");
+    assert!(out.contains("seat 3: "), "{out}");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn strategy_files_load() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/strategies/no-chow.json");
+    let out = stdout(&mj(&["compare", path, "efficiency", "--hands", "20"], ""));
+    assert!(out.contains("no-chow vs efficiency"), "{out}");
+}

@@ -542,6 +542,7 @@ dependencies = [
  "anyhow",
  "clap",
  "mjers",
+ "mjers-sim",
  "serde",
  "serde_json",
 ]
