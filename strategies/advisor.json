@@ -1,0 +1,24 @@
+{
+  "kind": "advisor",
+  "name": "advisor",
+  "advice": {
+    "samples": 50,
+    "candidates": 4,
+    "seed": 0,
+    "rollout": {
+      "kind": "heuristic",
+      "name": "tuned-family",
+      "params": {
+        "chow": "when_improves",
+        "pong": "when_improves",
+        "exposed_kong": "always",
+        "concealed_kong": "always",
+        "upgrade_kong": "always",
+        "claim_max_shanten": 8,
+        "caution": 0.0,
+        "fold_shanten": 8,
+        "fold_readiness": 2.0
+      }
+    }
+  }
+}

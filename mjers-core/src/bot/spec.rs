@@ -5,6 +5,8 @@ use serde::{
     Serialize,
 };
 
+use crate::advisor::AdviceConfig;
+use crate::advisor::policy::AdvisorBot;
 use crate::bot::heuristic::HeuristicBot;
 use crate::bot::params::Params;
 use crate::bot::policy::{
@@ -22,6 +24,11 @@ pub enum BotSpec {
         name: String,
         #[serde(default)]
         params: Params,
+    },
+    /// Monte Carlo advice at every decision; far slower than the others.
+    Advisor {
+        name: String,
+        advice: Box<AdviceConfig>,
     },
 }
 
@@ -45,7 +52,7 @@ impl BotSpec {
 
     pub fn name(&self) -> &str {
         match self {
-            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } => name,
+            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } => name,
         }
     }
 
@@ -57,6 +64,7 @@ impl BotSpec {
         match self {
             BotSpec::Random { .. } => Box::new(RandomBot::new(seed)),
             BotSpec::Heuristic { name, params } => Box::new(HeuristicBot::new(name.clone(), params.clone())),
+            BotSpec::Advisor { name, advice } => Box::new(AdvisorBot::new(name.clone(), (**advice).clone(), seed)),
         }
     }
 }

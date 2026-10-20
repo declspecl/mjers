@@ -2,6 +2,7 @@
 
 pub mod heuristic;
 pub mod montecarlo;
+pub mod policy;
 
 use serde::{
     Deserialize,
