@@ -1,4 +1,4 @@
-"""Train the masked MLP by imitation on disjoint hand-seed datasets."""
+"""Train a masked policy by imitation on disjoint hand-seed datasets."""
 
 import argparse
 import math
@@ -14,11 +14,12 @@ from torch.nn import functional as F
 from torch.optim import Adam, Optimizer
 
 from mjers.data import DecisionDataset, load_dataset
-from mjers.model import DeviceName, PolicyMetadata, PolicyNet, TrainedPolicy, hand_seeds, save_policy
+from mjers.model import Architecture, DeviceName, PolicyMetadata, PolicyNetwork, TrainedPolicy, build_network, hand_seeds, save_policy
 
 
 @dataclass(frozen=True)
 class TrainingConfig:
+    architecture: Architecture
     hidden_width: int
     epochs: int
     batch_size: int
@@ -84,7 +85,7 @@ class TrainingResult:
     report: TrainingReport
 
 
-def measure(network: PolicyNet, data: PolicyBatch, batch_size: int) -> Metrics:
+def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int) -> Metrics:
     network.eval()
     loss = 0.0
     uniform_loss = 0.0
@@ -121,7 +122,7 @@ def train(
     torch.set_num_threads(config.threads)
     manual_seed(config.seed)
     device = torch.device(config.device)
-    network = PolicyNet(config.hidden_width).to(device)
+    network = build_network(config.architecture, config.hidden_width).to(device)
     training_batch = PolicyBatch.from_dataset(training, device)
     validation_batch = PolicyBatch.from_dataset(validation, device)
     optimizer = Adam(network.parameters(), lr=config.learning_rate)
@@ -153,12 +154,12 @@ def train(
     network.load_state_dict(best_weights, strict=True)
     network.eval()
     metadata = PolicyMetadata(
-        "mlp-relu-v1", config.hidden_width, training.metadata, hand_seeds(training.seeds), hand_seeds(validation.seeds)
+        config.architecture, config.hidden_width, training.metadata, hand_seeds(training.seeds), hand_seeds(validation.seeds)
     )
     return TrainingResult(TrainedPolicy(network, metadata, device), TrainingReport(config, tuple(history), best_epoch))
 
 
-def learn_batch(network: PolicyNet, optimizer: Optimizer, batch: PolicyBatch) -> None:
+def learn_batch(network: PolicyNetwork, optimizer: Optimizer, batch: PolicyBatch) -> None:
     optimizer.zero_grad(set_to_none=True)
     logits = network.forward(batch.tiles, batch.context, batch.action_mask)
     loss = F.cross_entropy(logits, batch.actions)
@@ -172,6 +173,7 @@ class TrainArguments(argparse.Namespace):
     training: Path
     validation: Path
     output: Path
+    architecture: Architecture
     hidden_width: int
     epochs: int
     batch_size: int
@@ -186,6 +188,7 @@ def main() -> None:
     parser.add_argument("--training", type=Path, required=True)
     parser.add_argument("--validation", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--architecture", choices=("mlp-relu-v1", "suit-cnn-relu-v1"), required=True)
     parser.add_argument("--hidden-width", type=int, required=True)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--batch-size", type=int, required=True)
@@ -194,7 +197,9 @@ def main() -> None:
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), required=True)
     parser.add_argument("--threads", type=int, required=True)
     args = parser.parse_args(namespace=TrainArguments())
-    config = TrainingConfig(args.hidden_width, args.epochs, args.batch_size, args.learning_rate, args.seed, args.device, args.threads)
+    config = TrainingConfig(
+        args.architecture, args.hidden_width, args.epochs, args.batch_size, args.learning_rate, args.seed, args.device, args.threads
+    )
     result = train(load_dataset(args.training), load_dataset(args.validation), config, log_epoch)
     save_policy(args.output, result.policy)
     args.output.with_suffix(".training.json").write_bytes(msgspec.json.encode(result.report))

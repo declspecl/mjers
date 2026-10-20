@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use mjers_core::advisor::heuristic;
 use mjers_core::bot::encoding::{
     self,
     EncodedObservation,
@@ -59,6 +60,18 @@ struct Transition {
     terminated: bool,
 }
 
+/// Observation-only heuristic analysis for diagnostics, never policy inputs.
+#[pyclass(frozen, module = "mjers._native", get_all)]
+struct ActionAssessment {
+    index: usize,
+    description: String,
+    shanten: i8,
+    live_improving: u32,
+    danger: f64,
+    immediate_units: u32,
+    reasons: Vec<String>,
+}
+
 /// A turn-based four-player environment, with no auto-reset.
 /// Claim responses are separate steps; they remain private until resolution.
 /// Use each environment on its creating Python thread.
@@ -99,6 +112,35 @@ impl Env {
     #[getter]
     fn teacher_json(&self) -> PyResult<String> {
         serde_json::to_string(&self.teacher).map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    }
+
+    #[getter]
+    fn concealed_hand(&self) -> PyResult<String> {
+        let seat = self.current_seat()?;
+        Ok(self.game.observe(seat).hand().concealed().to_string())
+    }
+
+    /// Existing advisor rankings, restricted to the acting seat's observation.
+    /// Claims assume the advisor's best follow-up discard; these scores are
+    /// explanatory proxies, not rollout values or a teacher-policy ranking.
+    fn rank_actions(&self) -> PyResult<Vec<ActionAssessment>> {
+        let seat = self.current_seat()?;
+        let observation = self.game.observe(seat);
+        heuristic::rank(&observation)
+            .into_iter()
+            .map(|assessment| {
+                let index = encoding::action_index(assessment.action, observation.decision()).ok_or_else(|| PyRuntimeError::new_err("advisor action has no encoding"))?;
+                Ok(ActionAssessment {
+                    index,
+                    description: assessment.action.to_string(),
+                    shanten: assessment.shanten,
+                    live_improving: assessment.live_improving,
+                    danger: assessment.danger,
+                    immediate_units: assessment.immediate_units,
+                    reasons: assessment.reasons,
+                })
+            })
+            .collect()
     }
 
     #[pyo3(signature = (seed, dealer))]
@@ -163,6 +205,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Env>()?;
     module.add_class::<Observation>()?;
     module.add_class::<Transition>()?;
+    module.add_class::<ActionAssessment>()?;
     module.add("ENCODING_VERSION", encoding::VERSION)?;
     module.add("ACTION_COUNT", encoding::ACTIONS)?;
     module.add("TILE_PLANES", encoding::PLANES)?;

@@ -19,6 +19,7 @@ use crate::game::observation::{
 use crate::hand::Hand;
 use crate::hand::ukeire::Ukeire;
 use crate::tile::Tile;
+use crate::tile::counts::TileCounts;
 
 /// One legal action, scored and explained.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,11 +65,11 @@ fn assess(
     action: Action,
 ) -> Option<Assessment> {
     let hand = obs.hand();
-    let visible = obs.public_tiles();
+    let mut seen = *obs.public_tiles();
     let payouts = obs.rules().payouts;
     let others = 3;
     let mut reasons = Vec::new();
-    let (after, extra_visible, immediate_units) = match action {
+    let (after, immediate_units) = match action {
         Action::Win | Action::SelfDrawWin => {
             let units = win_units(obs, action);
             reasons.push(format!("wins now, collecting {units} units"));
@@ -84,33 +85,34 @@ fn assess(
         Action::Discard(tile) => {
             let mut after = *hand;
             after.discard(tile).ok()?;
-            (after, Some(tile), 0)
+            seen.add(tile);
+            (after, 0)
         },
         Action::ConcealedKong(_) | Action::UpgradeKong(_) => {
             let after = after_kong(hand, action)?;
+            reveal_meld_tiles(hand, &after, &mut seen);
             let concealed = matches!(action, Action::ConcealedKong(_));
             let each = if concealed { payouts.concealed_kong } else { payouts.exposed_kong };
             reasons.push(format!("{} kong collects {} units now", if concealed { "concealed" } else { "exposed" }, each * others));
-            (after, None, each * others)
+            (after, each * others)
         },
         Action::Kong => {
             let after = after_claim(hand, claimed_tile(obs)?, action)?;
+            reveal_meld_tiles(hand, &after, &mut seen);
             reasons.push(format!("exposed kong collects {} units now", payouts.exposed_kong * others));
-            (after, None, payouts.exposed_kong * others)
+            (after, payouts.exposed_kong * others)
         },
         Action::Pong | Action::Chow(_) => {
             let mut after = after_claim(hand, claimed_tile(obs)?, action)?;
-            let discard = best_discard(&after, visible)?;
+            reveal_meld_tiles(hand, &after, &mut seen);
+            let discard = best_discard(&after, &seen)?;
             after.discard(discard).ok()?;
+            seen.add(discard);
             reasons.push(format!("then discard {discard}"));
-            (after, Some(discard), 0)
+            (after, 0)
         },
-        Action::Pass => (*hand, None, 0),
+        Action::Pass => (*hand, 0),
     };
-    let mut seen = *visible;
-    if let Some(tile) = extra_visible {
-        seen.add(tile);
-    }
     let ukeire = after.ukeire(&seen);
     reasons.insert(0, describe(&ukeire, hand, &after));
     let danger = match action {
@@ -132,6 +134,21 @@ fn assess(
         immediate_units,
         reasons,
     })
+}
+
+/// The offered tile and any existing pong are already public. Only copies
+/// leaving the concealed hand become newly visible when declaring a meld.
+fn reveal_meld_tiles(
+    before: &Hand,
+    after: &Hand,
+    visible: &mut TileCounts,
+) {
+    for tile in before.concealed().kinds() {
+        let revealed = before.concealed().get(tile).saturating_sub(after.concealed().get(tile));
+        for _ in 0..revealed {
+            visible.add(tile);
+        }
+    }
 }
 
 fn claimed_tile(obs: &Observation<'_>) -> Option<Tile> {
@@ -203,7 +220,12 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::bot::policy::{
+        Policy,
+        RandomBot,
+    };
     use crate::game::Game;
+    use crate::game::action::Phase;
     use crate::rules::Ruleset;
     use crate::rules::seat::Seat;
 
@@ -245,5 +267,75 @@ mod tests {
         let bonus = game.hand(seat).bonus().len() as u32;
         assert_eq!(ranked[0].immediate_units, 3 * (3 + bonus));
         assert!(ranked[0].reasons[0].starts_with("wins now"));
+    }
+
+    #[test]
+    fn meld_assessments_match_tiles_published_by_the_engine() {
+        let rules = Arc::new(Ruleset::family());
+        let mut covered = [false; 5];
+        let mut bot = RandomBot::new(17);
+        for seed in 0..1_000 {
+            let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
+            while let Some(seat) = game.to_act().first() {
+                let obs = game.observe(seat);
+                let legal = obs.legal_actions();
+                for &action in legal.iter() {
+                    let category = match action {
+                        Action::Chow(_) => 0,
+                        Action::Pong => 1,
+                        Action::Kong => 2,
+                        Action::ConcealedKong(_) => 3,
+                        Action::UpgradeKong(_) => 4,
+                        _ => continue,
+                    };
+                    if covered[category] {
+                        continue;
+                    }
+                    let mut branch = game.clone();
+                    branch.apply(seat, action).unwrap();
+                    while matches!(branch.phase(), Phase::Claim { .. }) {
+                        let other = branch.to_act().first().unwrap();
+                        branch.apply(other, Action::Pass).unwrap();
+                    }
+                    if branch.is_over() {
+                        continue;
+                    }
+                    let mut stale_visible = *obs.public_tiles();
+                    let discard = if matches!(action, Action::Chow(_) | Action::Pong) {
+                        let tile = best_discard(branch.hand(seat), branch.public_tiles()).unwrap();
+                        branch.apply(seat, Action::Discard(tile)).unwrap();
+                        stale_visible.add(tile);
+                        Some(tile)
+                    } else {
+                        None
+                    };
+                    let mut after = *branch.hand(seat);
+                    if discard.is_none() {
+                        // Kongs draw immediately. Assessments describe the
+                        // waiting hand before that unknown replacement tile.
+                        after.discard(branch.last_draw().unwrap()).unwrap();
+                    }
+                    let expected = after.ukeire(branch.public_tiles());
+                    // Require a real availability difference for every meld
+                    // kind, rather than cases where revealed tiles cannot help.
+                    if expected.total() == after.ukeire(&stale_visible).total() {
+                        continue;
+                    }
+                    let assessment = assess(&obs, &Threats::assess(&obs), action).unwrap();
+                    assert_eq!(assessment.shanten, expected.shanten, "seed {seed}, {action:?}");
+                    assert_eq!(assessment.live_improving, expected.total(), "seed {seed}, {action:?}");
+                    if let Some(tile) = discard {
+                        assert!(assessment.reasons.contains(&format!("then discard {tile}")), "seed {seed}, {action:?}");
+                    }
+                    covered[category] = true;
+                }
+                if covered.iter().all(|&seen| seen) {
+                    return;
+                }
+                let action = bot.act(&obs, &legal);
+                game.apply(seat, action).unwrap();
+            }
+        }
+        assert_eq!(covered, [true; 5], "exercise every kind of meld");
     }
 }

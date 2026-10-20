@@ -18,7 +18,9 @@ class LearningTests(unittest.TestCase):
     def test_training_checkpoint_and_complete_hand_evaluation(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 8))
         validation = collect(Env("efficiency", rules="family"), range(100, 104))
-        config = TrainingConfig(hidden_width=32, epochs=8, batch_size=64, learning_rate=0.01, seed=7, device="cpu", threads=1)
+        config = TrainingConfig(
+            architecture="mlp-relu-v1", hidden_width=32, epochs=8, batch_size=64, learning_rate=0.01, seed=7, device="cpu", threads=1
+        )
         epochs: list[EpochMetrics] = []
         result = train(training, validation, config, epochs.append)
         self.assertEqual(len(epochs), config.epochs + 1)
@@ -59,7 +61,7 @@ class LearningTests(unittest.TestCase):
 
     def test_training_rejects_leaking_seeds_or_mixed_rules(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 2))
-        config = TrainingConfig(32, 1, 32, 0.001, 0, "cpu", 1)
+        config = TrainingConfig("mlp-relu-v1", 32, 1, 32, 0.001, 0, "cpu", 1)
         epochs: list[EpochMetrics] = []
         with self.assertRaisesRegex(ValueError, "overlap"):
             train(training, training, config, epochs.append)

@@ -18,6 +18,7 @@ from mjers._native import ACTION_COUNT, CONTEXT_SIZE, ENCODING_VERSION, TILE_PLA
 from mjers.data import DatasetMetadata
 
 type DeviceName = Literal["cpu", "mps", "cuda"]
+type Architecture = Literal["mlp-relu-v1", "suit-cnn-relu-v1"]
 
 
 class PolicyNet(nn.Module):
@@ -38,9 +39,55 @@ class PolicyNet(nn.Module):
         return logits.masked_fill(~action_mask, -torch.inf)
 
 
+class SuitPolicyNet(nn.Module):
+    """Share rank-pattern filters across suits; honors have no rank adjacency."""
+
+    def __init__(self, hidden_width: int) -> None:
+        super().__init__()
+        if hidden_width <= 0:
+            raise ValueError("hidden width must be positive")
+        self.hidden_width: int = hidden_width
+        self.suit_input: nn.Conv1d = nn.Conv1d(TILE_PLANES, 48, kernel_size=3, padding=1)
+        self.suit_hidden: nn.Conv1d = nn.Conv1d(48, 48, kernel_size=3, padding=1)
+        self.honor_input: nn.Conv1d = nn.Conv1d(TILE_PLANES, 48, kernel_size=1)
+        self.honor_hidden: nn.Conv1d = nn.Conv1d(48, 48, kernel_size=1)
+        self.input_layer: nn.Linear = nn.Linear(48 * 34 + CONTEXT_SIZE, hidden_width)
+        self.hidden_layer: nn.Linear = nn.Linear(hidden_width, hidden_width)
+        self.action_layer: nn.Linear = nn.Linear(hidden_width, ACTION_COUNT)
+
+    def tile_features(self, tiles: Tensor) -> Tensor:
+        # Separate suits into batch entries before convolution: 9m and 1p
+        # must never become adjacent, while each suit uses the same filters.
+        batch_size = tiles.shape[0]
+        suits = tiles[:, :, :27].reshape(batch_size, TILE_PLANES, 3, 9).permute(0, 2, 1, 3)
+        suits = suits.reshape(batch_size * 3, TILE_PLANES, 9)
+        suits = self.suit_input.forward(suits).relu()
+        suits = self.suit_hidden.forward(suits).relu()
+        suits = suits.reshape(batch_size, 3, 48, 9).permute(0, 2, 1, 3).reshape(batch_size, 48, 27)
+        honors = self.honor_input.forward(tiles[:, :, 27:]).relu()
+        honors = self.honor_hidden.forward(honors).relu()
+        return torch.cat((suits, honors), dim=2)
+
+    def forward(self, tiles: Tensor, context: Tensor, action_mask: Tensor) -> Tensor:
+        features = torch.cat((self.tile_features(tiles).flatten(start_dim=1), context), dim=1)
+        hidden = self.input_layer.forward(features).relu()
+        hidden = self.hidden_layer.forward(hidden).relu()
+        logits = self.action_layer.forward(hidden)
+        return logits.masked_fill(~action_mask, -torch.inf)
+
+
+type PolicyNetwork = PolicyNet | SuitPolicyNet
+
+
+def build_network(architecture: Architecture, hidden_width: int) -> PolicyNetwork:
+    if architecture == "mlp-relu-v1":
+        return PolicyNet(hidden_width)
+    return SuitPolicyNet(hidden_width)
+
+
 @dataclass(frozen=True)
 class PolicyMetadata:
-    architecture: Literal["mlp-relu-v1"]
+    architecture: Architecture
     hidden_width: int
     dataset: DatasetMetadata
     training_seeds: tuple[int, ...]
@@ -49,7 +96,7 @@ class PolicyMetadata:
 
 @dataclass(frozen=True)
 class TrainedPolicy:
-    network: PolicyNet
+    network: PolicyNetwork
     metadata: PolicyMetadata
     device: torch.device
 
@@ -84,7 +131,7 @@ def load_policy(path: Path, device: torch.device) -> TrainedPolicy:
         metadata = msgspec.json.decode(header["mjers"], type=PolicyMetadata)
     if metadata.dataset.encoding_version != ENCODING_VERSION:
         raise ValueError("checkpoint encoding is incompatible")
-    network = PolicyNet(metadata.hidden_width).to(device)
+    network = build_network(metadata.architecture, metadata.hidden_width).to(device)
     network.load_state_dict(load_file(path, device=str(device)), strict=True)
     network.eval()
     return TrainedPolicy(network, metadata, device)

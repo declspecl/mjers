@@ -15,6 +15,25 @@ from mjers.model import DeviceName, TrainedPolicy, load_policy
 
 
 @dataclass(frozen=True)
+class WallResult:
+    seed: int
+    candidate_units_by_seat: tuple[int, ...]
+    baseline_units_by_seat: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if len(self.candidate_units_by_seat) != 4 or len(self.baseline_units_by_seat) != 4:
+            raise ValueError("wall results require returns for all four seats")
+
+    def candidate_mean(self) -> float:
+        return mean(self.candidate_units_by_seat)
+
+    def paired_delta(self) -> float:
+        return mean(
+            candidate - baseline for candidate, baseline in zip(self.candidate_units_by_seat, self.baseline_units_by_seat, strict=True)
+        )
+
+
+@dataclass(frozen=True)
 class Comparison:
     rules_json: str
     baseline_json: str
@@ -22,6 +41,27 @@ class Comparison:
     candidate_units_per_hand: float
     delta_units_per_hand: float
     paired_standard_error: float
+    walls: tuple[WallResult, ...]
+
+
+@dataclass(frozen=True)
+class PairedDifference:
+    seeds: tuple[int, ...]
+    second_minus_first_units_per_hand: float
+    paired_standard_error: float
+
+
+def paired_difference(first: Comparison, second: Comparison) -> PairedDifference:
+    if first.rules_json != second.rules_json or first.baseline_json != second.baseline_json:
+        raise ValueError("paired reports require identical rules and opponents")
+    if first.seeds != second.seeds or len(first.seeds) < 2:
+        raise ValueError("paired reports require the same independent wall seeds")
+    if tuple(wall.seed for wall in first.walls) != first.seeds or tuple(wall.seed for wall in second.walls) != second.seeds:
+        raise ValueError("paired report wall results do not match its seeds")
+    if any(a.baseline_units_by_seat != b.baseline_units_by_seat for a, b in zip(first.walls, second.walls, strict=True)):
+        raise ValueError("paired reports have inconsistent baseline results")
+    deltas = [b.candidate_mean() - a.candidate_mean() for a, b in zip(first.walls, second.walls, strict=True)]
+    return PairedDifference(first.seeds, mean(deltas), stdev(deltas) / math.sqrt(len(deltas)))
 
 
 def play_candidate(env: Env, seed: int, seat: int, policy: TrainedPolicy) -> list[int]:
@@ -53,17 +93,18 @@ def compare(policy: TrainedPolicy, env: Env, seeds: range) -> Comparison:
     seen = set(policy.metadata.training_seeds) | set(policy.metadata.validation_seeds)
     if seen.intersection(seeds):
         raise ValueError("evaluation hand seeds overlap training or validation")
-    deltas_by_seed: list[float] = []
-    returns_by_seed: list[float] = []
+    walls: list[WallResult] = []
     for seed in seeds:
-        baseline = play_teacher(env, seed)
-        candidate = [play_candidate(env, seed, seat, policy)[seat] for seat in range(4)]
-        returns_by_seed.append(mean(candidate))
-        deltas_by_seed.append(mean(candidate[seat] - baseline[seat] for seat in range(4)))
+        baseline = tuple(play_teacher(env, seed))
+        candidate = tuple(play_candidate(env, seed, seat, policy)[seat] for seat in range(4))
+        walls.append(WallResult(seed, candidate, baseline))
     # Four seat rotations of one wall are correlated. Estimate uncertainty
     # across independent walls, retaining the within-wall pairing.
-    error = stdev(deltas_by_seed) / math.sqrt(len(deltas_by_seed))
-    return Comparison(env.rules_json, env.teacher_json, tuple(seeds), mean(returns_by_seed), mean(deltas_by_seed), error)
+    deltas = [wall.paired_delta() for wall in walls]
+    error = stdev(deltas) / math.sqrt(len(deltas))
+    return Comparison(
+        env.rules_json, env.teacher_json, tuple(seeds), mean(wall.candidate_mean() for wall in walls), mean(deltas), error, tuple(walls)
+    )
 
 
 class EvaluateArguments(argparse.Namespace):
