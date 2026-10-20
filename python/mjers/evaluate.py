@@ -5,13 +5,31 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean, stdev
+from typing import Literal
 
 import msgspec
 import torch
 
-from mjers._native import Env
+from mjers._native import Env, Observation
 from mjers.collect import read_spec
 from mjers.model import DeviceName, TrainedPolicy, load_policy
+
+type DecisionScope = Literal["all", "turns", "claims"]
+"""Which of the candidate seat's decisions the candidate makes; the baseline makes the rest.
+
+Restricting the scope attributes a difference to turn decisions (discards and
+kongs) or to claim responses.
+"""
+
+CLAIM_FLAGS = (17, 18)
+
+
+def is_claim(observation: Observation) -> bool:
+    return any(observation.context[flag] > 0 for flag in CLAIM_FLAGS)
+
+
+def in_scope(scope: DecisionScope, observation: Observation) -> bool:
+    return scope == "all" or (scope == "claims") == is_claim(observation)
 
 
 @dataclass(frozen=True)
@@ -37,6 +55,7 @@ class WallResult:
 class Comparison:
     rules_json: str
     baseline_json: str
+    candidate_decisions: DecisionScope
     seeds: tuple[int, ...]
     candidate_units_per_hand: float
     delta_units_per_hand: float
@@ -68,10 +87,11 @@ def range_overlaps(a: range, b: range) -> bool:
     return max(a.start, b.start) < min(a.stop, b.stop)
 
 
-def play_candidate(env: Env, seed: int, seat: int, policy: TrainedPolicy) -> list[int]:
+def play_candidate(env: Env, seed: int, seat: int, policy: TrainedPolicy, scope: DecisionScope) -> list[int]:
     observation = env.reset(seed, seed % 4)
     while observation is not None:
-        action = policy.act(observation) if observation.seat == seat else env.teacher_action()
+        candidate = observation.seat == seat and in_scope(scope, observation)
+        action = policy.act(observation) if candidate else env.teacher_action()
         transition = env.step(action)
         if transition.terminated:
             return transition.rewards
@@ -89,7 +109,7 @@ def play_teacher(env: Env, seed: int) -> list[int]:
     raise RuntimeError("hand ended without a settlement")
 
 
-def compare(policy: TrainedPolicy, env: Env, seeds: range) -> Comparison:
+def compare(policy: TrainedPolicy, env: Env, seeds: range, scope: DecisionScope) -> Comparison:
     if len(seeds) < 2:
         raise ValueError("comparison needs at least two independent hand seeds")
     if policy.metadata.dataset.rules_json != env.rules_json:
@@ -100,14 +120,21 @@ def compare(policy: TrainedPolicy, env: Env, seeds: range) -> Comparison:
     walls: list[WallResult] = []
     for seed in seeds:
         baseline = tuple(play_teacher(env, seed))
-        candidate = tuple(play_candidate(env, seed, seat, policy)[seat] for seat in range(4))
+        candidate = tuple(play_candidate(env, seed, seat, policy, scope)[seat] for seat in range(4))
         walls.append(WallResult(seed, candidate, baseline))
     # Four seat rotations of one wall are correlated. Estimate uncertainty
     # across independent walls, retaining the within-wall pairing.
     deltas = [wall.paired_delta() for wall in walls]
     error = stdev(deltas) / math.sqrt(len(deltas))
     return Comparison(
-        env.rules_json, env.teacher_json, tuple(seeds), mean(wall.candidate_mean() for wall in walls), mean(deltas), error, tuple(walls)
+        env.rules_json,
+        env.teacher_json,
+        scope,
+        tuple(seeds),
+        mean(wall.candidate_mean() for wall in walls),
+        mean(deltas),
+        error,
+        tuple(walls),
     )
 
 
@@ -119,6 +146,7 @@ class EvaluateArguments(argparse.Namespace):
     hands: int
     device: DeviceName
     threads: int
+    candidate_decisions: DecisionScope
     output: Path
 
 
@@ -131,6 +159,7 @@ def main() -> None:
     parser.add_argument("--hands", type=int, required=True, help="independent walls; candidate plays every seat")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), required=True)
     parser.add_argument("--threads", type=int, required=True)
+    parser.add_argument("--candidate-decisions", choices=("all", "turns", "claims"), required=True, help="the baseline makes the others")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(namespace=EvaluateArguments())
     if args.threads <= 0:
@@ -138,7 +167,7 @@ def main() -> None:
     torch.set_num_threads(args.threads)
     policy = load_policy(args.checkpoint, torch.device(args.device))
     env = Env(teacher=read_spec(args.baseline), rules=read_spec(args.rules))
-    result = compare(policy, env, range(args.start_seed, args.start_seed + args.hands))
+    result = compare(policy, env, range(args.start_seed, args.start_seed + args.hands), args.candidate_decisions)
     encoded = msgspec.json.encode(result)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(encoded)

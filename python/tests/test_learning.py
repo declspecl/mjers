@@ -61,12 +61,12 @@ class LearningTests(unittest.TestCase):
             illegal = torch.tensor(~observation.action_mask).unsqueeze(0)
             self.assertTrue(bool(torch.isneginf(logits[illegal]).all()))
             self.assertTrue(bool(torch.isfinite(logits[~illegal]).all()))
-            comparison = compare(loaded, env, range(200, 202))
+            comparison = compare(loaded, env, range(200, 202), "all")
             self.assertEqual(comparison.seeds, (200, 201))
             with self.assertRaisesRegex(ValueError, "overlap"):
-                compare(loaded, env, range(100, 102))
+                compare(loaded, env, range(100, 102), "all")
             with self.assertRaisesRegex(ValueError, "rules"):
-                compare(loaded, Env("efficiency", rules="discarder-pays"), range(200, 202))
+                compare(loaded, Env("efficiency", rules="discarder-pays"), range(200, 202), "all")
 
     def test_training_rejects_leaking_seeds_or_mixed_rules(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 2))

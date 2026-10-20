@@ -55,10 +55,10 @@ class ReinforcementTests(unittest.TestCase):
         after = policy.network.state_dict()
         self.assertTrue(any(not torch.equal(before[name], after[name]) for name in before))
         with self.assertRaisesRegex(ValueError, "overlap"):
-            compare(policy, env, range(510, 514))
+            compare(policy, env, range(510, 514), "all")
         with self.assertRaisesRegex(ValueError, "overlap"):
             reinforce(policy, env.teacher_json, "family", config(505), reports.append)
-        self.assertEqual(compare(policy, env, range(600, 602)).seeds, (600, 601))
+        self.assertEqual(compare(policy, env, range(600, 602), "all").seeds, (600, 601))
 
 
 if __name__ == "__main__":
