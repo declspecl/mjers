@@ -255,21 +255,21 @@ pub struct Evaluation {
 }
 
 impl Evaluation {
-    /// Each legal action of `observation` with its softmax probability, most likely first.
+    /// Each legal action of `observation` with its softmax probability, most
+    /// likely first; ties go to the lower action index, matching [`Self::best`].
     pub fn choices(
         &self,
         observation: &Observation<'_>,
     ) -> Vec<(Action, f32)> {
-        let legal: Vec<(Action, f32)> = observation
+        let mut legal: Vec<(usize, Action)> = observation
             .legal_actions()
             .iter()
-            .filter_map(|&action| encoding::action_index(action, observation.decision()).map(|index| (action, self.logits[index])))
+            .filter_map(|&action| encoding::action_index(action, observation.decision()).map(|index| (index, action)))
             .collect();
-        let top = legal.iter().map(|&(_, logit)| logit).fold(f32::NEG_INFINITY, f32::max);
-        let total: f32 = legal.iter().map(|&(_, logit)| (logit - top).exp()).sum();
-        let mut choices: Vec<(Action, f32)> = legal.into_iter().map(|(action, logit)| (action, (logit - top).exp() / total)).collect();
-        choices.sort_by(|a, b| b.1.total_cmp(&a.1));
-        choices
+        legal.sort_by(|a, b| self.logits[b.0].total_cmp(&self.logits[a.0]).then(a.0.cmp(&b.0)));
+        let top = legal.first().map_or(0.0, |&(index, _)| self.logits[index]);
+        let total: f32 = legal.iter().map(|&(index, _)| (self.logits[index] - top).exp()).sum();
+        legal.into_iter().map(|(index, action)| (action, (self.logits[index] - top).exp() / total)).collect()
     }
 
     /// The highest legal logit, first index on ties (as `torch.argmax`).
