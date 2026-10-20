@@ -1,4 +1,9 @@
-"""Duplicate-seat comparison against a teacher field on untouched hand seeds."""
+"""Duplicate-seat comparison against a teacher field on untouched hand seeds.
+
+This plays every candidate decision through PyTorch, one observation at a time.
+For `suit-resnet-v2` checkpoints, `mj compare` with a neural strategy file runs
+the same comparison in Rust across all cores, tens of times faster.
+"""
 
 import argparse
 import math
