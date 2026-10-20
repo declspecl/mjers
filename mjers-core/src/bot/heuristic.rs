@@ -22,6 +22,10 @@ use crate::game::observation::{
     Observation,
 };
 use crate::hand::Hand;
+use crate::hand::ukeire::{
+    DiscardOption,
+    Ukeire,
+};
 use crate::tile::Tile;
 
 pub struct HeuristicBot {
@@ -86,7 +90,7 @@ impl HeuristicBot {
     ) -> Option<Tile> {
         let hand = obs.hand();
         let options = hand.discard_options(obs.public_tiles());
-        let best = options.first()?.ukeire;
+        let best = fastest(&options)?;
         let threats = self.params.considers_danger().then(|| Threats::assess(obs));
         let folding = threats
             .as_ref()
@@ -96,7 +100,7 @@ impl HeuristicBot {
             if folding {
                 return danger;
             }
-            let slower = (shanten - best.shanten) as f64;
+            let slower = (pace(shanten, live) - pace(best.shanten, best.total())) as f64;
             // Slower options can have more improving tiles than the best's
             // winning tiles; those counts are not comparable, so never reward them.
             let fewer = (best.total() as f64 - live as f64).max(0.0) / best.total().max(1) as f64;
@@ -160,6 +164,20 @@ impl HeuristicBot {
         }
         best.map_or(Action::Pass, |(_, action)| action)
     }
+}
+
+/// Steps from winning, where a shape with no live improving tiles (a dead
+/// wait, when ready) counts one step slower: it must change shape to progress.
+fn pace(
+    shanten: i8,
+    live: u32,
+) -> i8 {
+    shanten + i8::from(live == 0)
+}
+
+/// The fastest discard's outcome: lowest pace, then most live improving tiles.
+fn fastest(options: &[DiscardOption]) -> Option<Ukeire> {
+    options.iter().map(|o| o.ukeire).min_by_key(|u| (pace(u.shanten, u.total()), std::cmp::Reverse(u.total())))
 }
 
 impl Policy for HeuristicBot {

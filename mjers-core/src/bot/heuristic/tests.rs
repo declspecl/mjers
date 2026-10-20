@@ -140,3 +140,27 @@ fn keeps_a_narrow_ready_hand() {
         assert_eq!(after.shanten(), 0, "{} discarded {discard}", bot.name());
     }
 }
+
+#[test]
+fn a_dead_wait_counts_as_one_step_slower() {
+    use crate::hand::ukeire::{
+        DiscardOption,
+        Ukeire,
+    };
+
+    let option = |discard: &str, shanten: i8, live: &[(&str, u8)]| {
+        let mut live_by_tile = [0; crate::tile::KINDS];
+        for &(t, n) in live {
+            live_by_tile[tile(t).index()] = n;
+        }
+        DiscardOption {
+            tile: tile(discard),
+            ukeire: Ukeire { shanten, live_by_tile },
+        }
+    };
+    let dead_ready = option("7p", 0, &[]);
+    let live_shape = option("5m", 1, &[("3m", 4), ("4m", 4), ("6p", 4)]);
+    assert_eq!(fastest(&[dead_ready, live_shape]), Some(live_shape.ukeire));
+    let live_ready = option("9s", 0, &[("5m", 3)]);
+    assert_eq!(fastest(&[live_shape, live_ready, dead_ready]), Some(live_ready.ukeire));
+}
