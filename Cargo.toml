@@ -1,14 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "mjers-tile",
-    "mjers-hand",
-    "mjers-rules",
-    "mjers-game",
-    "mjers-bot",
-    "mjers-advisor",
-    "mjers-sim",
-]
+members = ["mjers-core", "mjers-sim"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,12 +8,7 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-mjers-tile = { path = "mjers-tile" }
-mjers-hand = { path = "mjers-hand" }
-mjers-rules = { path = "mjers-rules" }
-mjers-game = { path = "mjers-game" }
-mjers-bot = { path = "mjers-bot" }
-mjers-advisor = { path = "mjers-advisor" }
+mjers-core = { path = "mjers-core" }
 mjers-sim = { path = "mjers-sim" }
 anyhow = "1.0.104"
 criterion = "0.8"
@@ -35,7 +22,7 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
-# The engine never panics: errors are returned, and tests opt back in.
+# Return errors instead of explicitly panicking; tests opt back in.
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
@@ -58,12 +45,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-mjers-tile.workspace = true
-mjers-hand.workspace = true
-mjers-rules.workspace = true
-mjers-game.workspace = true
-mjers-bot.workspace = true
-mjers-advisor.workspace = true
+mjers-core.workspace = true
 mjers-sim.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -74,6 +56,6 @@ workspace = true
 [profile.release]
 debug = 1
 
-# Hand analysis dominates bot play; optimise it even in dev and test builds.
-[profile.dev.package.mjers-hand]
+# Keep hand analysis fast in dev and test builds by optimising the engine.
+[profile.dev.package.mjers-core]
 opt-level = 3

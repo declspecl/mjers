@@ -4,17 +4,17 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers_advisor::advice::{
+use mjers_core::advisor::{
     Advice,
     AdviceConfig,
     advise,
 };
-use mjers_bot::heuristic::HeuristicBot;
-use mjers_bot::policy::decide;
-use mjers_game::game::Game;
-use mjers_game::trace::Trace;
-use mjers_game::wall::Wall;
-use mjers_rules::seat::Seat;
+use mjers_core::bot::heuristic::HeuristicBot;
+use mjers_core::bot::policy::decide;
+use mjers_core::game::Game;
+use mjers_core::game::trace::Trace;
+use mjers_core::game::wall::Wall;
+use mjers_core::rules::seat::Seat;
 
 use super::load;
 
@@ -72,7 +72,7 @@ fn position(args: &Args) -> anyhow::Result<Game> {
     if let Some(path) = &args.trace {
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
         let trace: Trace = serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
-        let wall: [_; mjers_game::wall::WALL_SIZE] = trace.wall.clone().try_into().ok().context("trace wall must hold 144 tiles")?;
+        let wall: [_; mjers_core::game::wall::WALL_SIZE] = trace.wall.clone().try_into().ok().context("trace wall must hold 144 tiles")?;
         let mut game = Game::from_wall(Arc::new(trace.rules.clone()), Wall::from_order(wall, trace.rules.reserved_tiles()), trace.dealer)?;
         for step in trace.steps.iter().take(args.step) {
             game.apply(step.seat, step.action)?;

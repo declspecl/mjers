@@ -2,7 +2,7 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers_bot::spec::BotSpec;
+use mjers_core::bot::spec::BotSpec;
 use mjers_sim::report::Report;
 use mjers_sim::runner::Seeds;
 use mjers_sim::tune::{
@@ -10,13 +10,10 @@ use mjers_sim::tune::{
     tune,
 };
 
+use super::load;
 use super::sim::{
     print_header,
     print_row,
-};
-use super::{
-    load,
-    provenance,
 };
 
 #[derive(clap::Args)]
@@ -71,7 +68,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         std::fs::write(path, serde_json::to_string_pretty(&tuned)? + "\n").with_context(|| format!("writing {path}"))?;
     }
     if args.json {
-        let report = Report::new("tuning", provenance::current(), rules, config.training, vec![tuned, field], result);
+        let report = Report::new("tuning", rules, config.training, vec![tuned, field], result);
         say!("{}", serde_json::to_string_pretty(&report)?)?;
         return Ok(());
     }

@@ -3,9 +3,9 @@
 
 use std::sync::Arc;
 
-use mjers_bot::spec::BotSpec;
-use mjers_rules::ruleset::Ruleset;
-use mjers_rules::seat::Seat;
+use mjers_core::bot::spec::BotSpec;
+use mjers_core::rules::Ruleset;
+use mjers_core::rules::seat::Seat;
 use serde::{
     Deserialize,
     Serialize,

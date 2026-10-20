@@ -1,6 +1,6 @@
-use mjers_bot::spec::BotSpec;
-use mjers_hand::hand::Hand;
-use mjers_tile::counts::TileCounts;
+use mjers_core::bot::spec::BotSpec;
+use mjers_core::hand::Hand;
+use mjers_core::tile::counts::TileCounts;
 
 use super::*;
 use crate::runner::play_hand;

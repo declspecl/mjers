@@ -4,9 +4,9 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers_game::trace::Trace;
-use mjers_rules::ruleset::Ruleset;
-use mjers_rules::seat::Seat;
+use mjers_core::game::trace::Trace;
+use mjers_core::rules::Ruleset;
+use mjers_core::rules::seat::Seat;
 use mjers_sim::runner::play_hand;
 
 use super::load;

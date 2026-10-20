@@ -20,7 +20,6 @@ mod analyze;
 mod compare;
 mod load;
 mod play;
-mod provenance;
 mod sim;
 mod study;
 mod trace;

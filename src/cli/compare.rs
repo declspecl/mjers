@@ -5,13 +5,10 @@ use mjers_sim::report::{
 };
 use mjers_sim::runner::Seeds;
 
+use super::load;
 use super::sim::{
     print_header,
     print_row,
-};
-use super::{
-    load,
-    provenance,
 };
 
 #[derive(clap::Args)]
@@ -39,7 +36,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let seeds = Seeds { start: args.seed, count: args.hands };
     let result = ComparisonResult::from(compare(&rules, &a, &b, &field, seeds)?);
     if args.json {
-        let report = Report::new("comparison", provenance::current(), rules, seeds, vec![a, b, field], result);
+        let report = Report::new("comparison", rules, seeds, vec![a, b, field], result);
         say!("{}", serde_json::to_string_pretty(&report)?)?;
         return Ok(());
     }

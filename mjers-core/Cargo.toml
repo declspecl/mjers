@@ -1,0 +1,33 @@
+[package]
+name = "mjers-core"
+description = "deterministic mahjong engine, hand analysis, policies, and advice"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+proptest = "1"
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "hand"
+harness = false
+
+[[bench]]
+name = "game"
+harness = false
+
+[[bench]]
+name = "bots"
+harness = false
+
+[[bench]]
+name = "advisor"
+harness = false

@@ -83,12 +83,14 @@ fn sim_prints_metrics_by_strategy_and_position() {
 }
 
 #[test]
-fn sim_json_report_has_provenance() {
+fn sim_json_report_has_experiment_inputs() {
     let out = stdout(&mj(&["sim", "--hands", "50", "--json"], ""));
     let report: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(report["schema"], 1);
+    assert_eq!(report["schema"], 2);
     assert_eq!(report["kind"], "simulation");
-    assert_eq!(report["provenance"]["revision"].as_str().unwrap().len(), 40);
+    assert_eq!(report["rules"]["name"], "family");
+    assert_eq!(report["seeds"]["start"], 0);
+    assert_eq!(report["seeds"]["count"], 50);
     assert_eq!(report["strategies"].as_array().unwrap().len(), 4);
 }
 

@@ -6,13 +6,13 @@
 //! Afterwards the champion is compared with the starting point on the next,
 //! disjoint seed block, which never influences selection.
 
-use mjers_bot::params::{
+use mjers_core::bot::params::{
     ClaimRule,
     KongRule,
     Params,
 };
-use mjers_bot::spec::BotSpec;
-use mjers_rules::ruleset::Ruleset;
+use mjers_core::bot::spec::BotSpec;
+use mjers_core::rules::Ruleset;
 use serde::{
     Deserialize,
     Serialize,

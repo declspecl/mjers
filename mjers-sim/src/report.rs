@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use mjers_bot::spec::BotSpec;
-use mjers_rules::ruleset::Ruleset;
+use mjers_core::bot::spec::BotSpec;
+use mjers_core::rules::Ruleset;
 use serde::{
     Deserialize,
     Serialize,
@@ -16,40 +16,13 @@ use crate::stats::{
     Summary,
 };
 
-pub const REPORT_SCHEMA: u32 = 1;
+pub const REPORT_SCHEMA: u32 = 2;
 
-/// Which build produced a report. Filled in by the binary from build-time
-/// metadata; a dirty revision does not identify uncommitted changes.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Provenance {
-    pub revision: String,
-    pub dirty: Option<bool>,
-    pub compiler: String,
-    pub target: String,
-    pub profile: String,
-    pub opt_level: String,
-}
-
-impl Provenance {
-    pub fn unknown() -> Provenance {
-        let unknown = || "unknown".to_string();
-        Provenance {
-            revision: unknown(),
-            dirty: None,
-            compiler: unknown(),
-            target: unknown(),
-            profile: unknown(),
-            opt_level: unknown(),
-        }
-    }
-}
-
-/// Everything needed to reproduce and interpret a result.
+/// Experiment inputs and results.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Report<T> {
     pub schema: u32,
     pub kind: String,
-    pub provenance: Provenance,
     pub rules: Ruleset,
     pub seeds: Seeds,
     /// Resolved strategies, in seat order for simulations.
@@ -60,7 +33,6 @@ pub struct Report<T> {
 impl<T> Report<T> {
     pub fn new(
         kind: &str,
-        provenance: Provenance,
         rules: Ruleset,
         seeds: Seeds,
         strategies: Vec<BotSpec>,
@@ -69,7 +41,6 @@ impl<T> Report<T> {
         Report {
             schema: REPORT_SCHEMA,
             kind: kind.to_string(),
-            provenance,
             rules,
             seeds,
             strategies,
@@ -127,11 +98,11 @@ mod tests {
         let table: [BotSpec; 4] = std::array::from_fn(|_| BotSpec::preset("efficiency").unwrap());
         let seeds = Seeds { start: 0, count: 20 };
         let summary = simulate(&Ruleset::family(), &table, seeds).unwrap();
-        let report = Report::new("simulation", Provenance::unknown(), Ruleset::family(), seeds, table.to_vec(), SimulationResult::from(summary));
+        let report = Report::new("simulation", Ruleset::family(), seeds, table.to_vec(), SimulationResult::from(summary));
         let json = serde_json::to_string_pretty(&report).unwrap();
-        assert!(json.contains("\"schema\": 1"));
         assert!(json.contains("\"ev\""));
         let back: Report<SimulationResult> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.schema, REPORT_SCHEMA);
         assert_eq!(back.result.summary, report.result.summary);
         assert_eq!(back.strategies, report.strategies);
     }

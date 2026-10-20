@@ -5,7 +5,7 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers_bot::spec::BotSpec;
+use mjers_core::bot::spec::BotSpec;
 use mjers_sim::features::write_features;
 use mjers_sim::report::{
     Report,
@@ -20,10 +20,7 @@ use mjers_sim::stats::{
     simulate,
 };
 
-use super::{
-    load,
-    provenance,
-};
+use super::load;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -67,7 +64,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     }
     let result = SimulationResult::from(simulate(&rules, &table, seeds)?);
     if args.json {
-        let report = Report::new("simulation", provenance::current(), rules, seeds, specs, result);
+        let report = Report::new("simulation", rules, seeds, specs, result);
         say!("{}", serde_json::to_string_pretty(&report)?)?;
         return Ok(());
     }

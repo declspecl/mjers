@@ -1,14 +1,14 @@
 //! What winning hands are made of: exposed vs concealed sets, chow suits and
 //! positions, and runs of chows.
 
-use mjers_game::game::Game;
-use mjers_game::trace::Event;
-use mjers_hand::meld::{
+use mjers_core::game::Game;
+use mjers_core::game::trace::Event;
+use mjers_core::hand::meld::{
     KongKind,
     Meld,
 };
-use mjers_rules::seat::Seat;
-use mjers_tile::tile::Tile;
+use mjers_core::rules::seat::Seat;
+use mjers_core::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,

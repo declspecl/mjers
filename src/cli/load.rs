@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use anyhow::Context;
-use mjers_bot::spec::BotSpec;
-use mjers_rules::ruleset::Ruleset;
+use mjers_core::bot::spec::BotSpec;
+use mjers_core::rules::Ruleset;
 
 pub fn ruleset(name_or_path: &str) -> anyhow::Result<Ruleset> {
     if let Some(rules) = Ruleset::preset(name_or_path) {

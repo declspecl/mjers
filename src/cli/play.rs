@@ -8,20 +8,20 @@ use anyhow::{
     Context,
     bail,
 };
-use mjers_advisor::advice::{
+use mjers_core::advisor::{
     AdviceConfig,
     advise,
 };
-use mjers_bot::policy::{
+use mjers_core::bot::policy::{
     Policy,
     decide,
 };
-use mjers_game::action::Action;
-use mjers_game::game::Game;
-use mjers_game::rng::derive_seed;
-use mjers_game::trace::Event;
-use mjers_rules::seat::Seat;
-use mjers_rules::settlement::WinSource;
+use mjers_core::game::Game;
+use mjers_core::game::action::Action;
+use mjers_core::game::rng::derive_seed;
+use mjers_core::game::trace::Event;
+use mjers_core::rules::seat::Seat;
+use mjers_core::rules::settlement::WinSource;
 
 use super::advise::print_advice;
 use super::load;

@@ -15,20 +15,20 @@ mod tests;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use mjers_game::game::Game;
-use mjers_game::trace::Event;
-use mjers_hand::meld::{
+use mjers_core::game::Game;
+use mjers_core::game::trace::Event;
+use mjers_core::hand::meld::{
     KongKind,
     Meld,
 };
-use mjers_hand::win::decompose;
-use mjers_rules::ruleset::Ruleset;
-use mjers_rules::seat::{
+use mjers_core::hand::win::decompose;
+use mjers_core::rules::Ruleset;
+use mjers_core::rules::seat::{
     SEATS,
     Seat,
 };
-use mjers_rules::settlement::WinSource;
-use mjers_tile::tile::{
+use mjers_core::rules::settlement::WinSource;
+use mjers_core::tile::{
     KINDS,
     SUITED_KINDS,
     Tile,

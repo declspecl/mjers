@@ -1,15 +1,15 @@
 //! Classifying a hand by how it waits when it first becomes ready.
 
-use mjers_hand::hand::Hand;
-use mjers_hand::wait::{
+use mjers_core::hand::Hand;
+use mjers_core::hand::wait::{
     WaitShape,
     wait_shapes,
 };
-use mjers_tile::counts::{
+use mjers_core::tile::Tile;
+use mjers_core::tile::counts::{
     COPIES,
     TileCounts,
 };
-use mjers_tile::tile::Tile;
 
 /// The wait-shape names reported, from most to least flexible.
 pub const MULTI_SIDED: &str = "multi-sided (3+ tiles)";

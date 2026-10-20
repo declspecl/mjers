@@ -2,14 +2,14 @@
 
 use std::collections::BTreeMap;
 
-use mjers_game::game::Game;
-use mjers_hand::meld::{
+use mjers_core::game::Game;
+use mjers_core::hand::meld::{
     KongKind,
     Meld,
 };
-use mjers_rules::ruleset::Ruleset;
-use mjers_rules::seat::Seat;
-use mjers_rules::settlement::WinSource;
+use mjers_core::rules::Ruleset;
+use mjers_core::rules::seat::Seat;
+use mjers_core::rules::settlement::WinSource;
 use serde::{
     Deserialize,
     Serialize,
@@ -189,7 +189,7 @@ pub fn simulate(
 
 #[cfg(test)]
 mod tests {
-    use mjers_bot::spec::BotSpec;
+    use mjers_core::bot::spec::BotSpec;
 
     use super::*;
 

@@ -502,76 +502,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "mjers-advisor"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "mjers-bot",
- "mjers-game",
- "mjers-hand",
- "mjers-rules",
- "mjers-tile",
- "serde",
-]
-
-[[package]]
-name = "mjers-bot"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "mjers-game",
- "mjers-hand",
- "mjers-rules",
- "mjers-tile",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "mjers-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
- "mjers-advisor",
- "mjers-bot",
- "mjers-game",
- "mjers-hand",
- "mjers-rules",
+ "mjers-core",
  "mjers-sim",
- "mjers-tile",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "mjers-game"
+name = "mjers-core"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "mjers-hand",
- "mjers-rules",
- "mjers-tile",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mjers-hand"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "mjers-tile",
  "proptest",
- "serde",
-]
-
-[[package]]
-name = "mjers-rules"
-version = "0.1.0"
-dependencies = [
- "mjers-hand",
- "mjers-tile",
  "serde",
  "serde_json",
 ]
@@ -580,20 +527,8 @@ dependencies = [
 name = "mjers-sim"
 version = "0.1.0"
 dependencies = [
- "mjers-bot",
- "mjers-game",
- "mjers-hand",
- "mjers-rules",
- "mjers-tile",
+ "mjers-core",
  "rayon",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "mjers-tile"
-version = "0.1.0"
-dependencies = [
  "serde",
  "serde_json",
 ]

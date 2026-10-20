@@ -12,10 +12,7 @@ use mjers_sim::study::{
     study,
 };
 
-use super::{
-    load,
-    provenance,
-};
+use super::load;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -39,7 +36,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let seeds = Seeds { start: args.seed, count: args.hands };
     let s = study(&rules, &table, seeds)?;
     if args.json {
-        let report = Report::new("study", provenance::current(), rules, seeds, vec![spec], s);
+        let report = Report::new("study", rules, seeds, vec![spec], s);
         say!("{}", serde_json::to_string_pretty(&report)?)?;
         return Ok(());
     }

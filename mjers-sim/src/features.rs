@@ -8,20 +8,20 @@
 use std::io::Write;
 use std::sync::Arc;
 
-use mjers_game::game::Game;
-use mjers_game::trace::Event;
-use mjers_hand::meld::{
+use mjers_core::game::Game;
+use mjers_core::game::trace::Event;
+use mjers_core::hand::meld::{
     KongKind,
     Meld,
 };
-use mjers_hand::wait::{
+use mjers_core::hand::wait::{
     WaitShape,
     wait_shapes,
 };
-use mjers_rules::ruleset::Ruleset;
-use mjers_rules::seat::Seat;
-use mjers_rules::settlement::WinSource;
-use mjers_tile::tile::{
+use mjers_core::rules::Ruleset;
+use mjers_core::rules::seat::Seat;
+use mjers_core::rules::settlement::WinSource;
+use mjers_core::tile::{
     Suit,
     Tile,
 };
@@ -219,7 +219,7 @@ impl From<serde_json::Error> for FeatureLogError {
 
 #[cfg(test)]
 mod tests {
-    use mjers_bot::spec::BotSpec;
+    use mjers_core::bot::spec::BotSpec;
 
     use super::*;
 

@@ -1,7 +1,7 @@
 use anyhow::bail;
-use mjers_hand::shanten;
-use mjers_hand::ukeire::Ukeire;
-use mjers_tile::counts::TileCounts;
+use mjers_core::hand::shanten;
+use mjers_core::hand::ukeire::Ukeire;
+use mjers_core::tile::counts::TileCounts;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -22,14 +22,14 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     match size {
         13 => {
             say!("shanten  {s}")?;
-            print_ukeire(&mjers_hand::ukeire::ukeire(&args.hand, args.melds, &args.visible))?;
+            print_ukeire(&mjers_core::hand::ukeire::ukeire(&args.hand, args.melds, &args.visible))?;
         },
         14 if s == -1 => say!("complete hand")?,
         14 => {
             say!("shanten  {s}")?;
             say!()?;
             say!("discard  shanten  live  improving tiles")?;
-            for option in mjers_hand::ukeire::discard_options(&args.hand, args.melds, &args.visible) {
+            for option in mjers_core::hand::ukeire::discard_options(&args.hand, args.melds, &args.visible) {
                 say!(
                     "{:<8} {:>7}  {:>4}  {}",
                     option.tile.to_string(),

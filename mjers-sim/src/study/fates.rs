@@ -1,15 +1,15 @@
 //! What becomes of every tile that enters a hand.
 
-use mjers_bot::efficiency::connectivity;
-use mjers_game::game::Game;
-use mjers_game::trace::Event;
-use mjers_hand::meld::{
+use mjers_core::bot::efficiency::connectivity;
+use mjers_core::game::Game;
+use mjers_core::game::trace::Event;
+use mjers_core::hand::meld::{
     KongKind,
     Meld,
 };
-use mjers_rules::seat::Seat;
-use mjers_rules::settlement::WinSource;
-use mjers_tile::tile::Tile;
+use mjers_core::rules::seat::Seat;
+use mjers_core::rules::settlement::WinSource;
+use mjers_core::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,

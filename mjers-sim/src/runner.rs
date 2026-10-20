@@ -2,16 +2,16 @@
 
 use std::sync::Arc;
 
-use mjers_bot::policy::{
+use mjers_core::bot::policy::{
     Policy,
     decide,
 };
-use mjers_bot::spec::BotSpec;
-use mjers_game::action::GameError;
-use mjers_game::game::Game;
-use mjers_game::rng::derive_seed;
-use mjers_rules::ruleset::Ruleset;
-use mjers_rules::seat::Seat;
+use mjers_core::bot::spec::BotSpec;
+use mjers_core::game::Game;
+use mjers_core::game::action::GameError;
+use mjers_core::game::rng::derive_seed;
+use mjers_core::rules::Ruleset;
+use mjers_core::rules::seat::Seat;
 use rayon::prelude::*;
 use serde::{
     Deserialize,
