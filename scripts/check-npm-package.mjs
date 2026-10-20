@@ -13,19 +13,28 @@ function run(command, args, cwd = consumer) {
 
 try {
     const cache = join(consumer, "cache");
-    const packed = JSON.parse(run("npm", [
-        "pack", "./npm", "--ignore-scripts", "--json", "--pack-destination", consumer, "--cache", cache,
-    ], root))[0];
-    run("npm", [
-        "install", join(consumer, packed.filename), "--offline", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", cache,
-    ]);
-    // Compile and run the same consumer used for the package's type checks.
+    const packOutput = run("npm", ["pack", "./npm", "--ignore-scripts", "--json", "--pack-destination", consumer, "--cache", cache], root);
+    const [packed] = JSON.parse(packOutput);
+
+    run("npm", ["install", join(consumer, packed.filename), "--offline", "--ignore-scripts", "--no-audit", "--no-fund", "--cache", cache]);
+
     await copyFile(new URL("../npm/tests/types.ts", import.meta.url), join(consumer, "consumer.mts"));
     run(process.execPath, [
-        join(root, "npm/node_modules/typescript/bin/tsc"), "--strict",
-        "--target", "ES2022", "--module", "NodeNext", "--lib", "ES2022,DOM", "consumer.mts",
+        join(root, "npm/node_modules/typescript/bin/tsc"),
+        "--strict",
+        "--noEmit",
+        "--target",
+        "ES2022",
+        "--module",
+        "NodeNext",
+        "--lib",
+        "ES2022,DOM",
+        "consumer.mts",
     ]);
-    run(process.execPath, ["consumer.mjs"]);
+
+    await copyFile(new URL("../npm/tests/engine.test.mjs", import.meta.url), join(consumer, "engine.test.mjs"));
+    run(process.execPath, ["--test", "engine.test.mjs"]);
+
     console.log(`Packed package passed clean-install, runtime, and TypeScript checks (${packed.size} bytes).`);
 } finally {
     await rm(consumer, { recursive: true, force: true });

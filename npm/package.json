@@ -26,13 +26,16 @@
         "mjers_wasm_bg.wasm"
     ],
     "scripts": {
+        "format": "biome check --write . ../scripts",
+        "check-format": "biome check . ../scripts",
         "build": "node ../scripts/build-wasm.mjs",
         "check-types": "tsc -p tsconfig.json",
-        "test": "npm run build && npm run check-types && node --test tests/*.test.mjs",
+        "test": "npm run check-format && npm run build && npm run check-types && node --test tests/*.test.mjs",
         "test:package": "node ../scripts/check-npm-package.mjs",
         "prepack": "npm test"
     },
     "devDependencies": {
+        "@biomejs/biome": "2.4.8",
         "typescript": "5.9.3"
     },
     "keywords": [

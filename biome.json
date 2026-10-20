@@ -1,0 +1,36 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.4.8/schema.json",
+    "files": {
+        "includes": [
+            "npm/**/*.js",
+            "npm/**/*.mjs",
+            "npm/**/*.ts",
+            "npm/*.json",
+            "scripts/*.mjs",
+            "!npm/mjers_wasm*",
+            "!npm/package-lock.json",
+            "!**/node_modules/**"
+        ]
+    },
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 140,
+        "lineEnding": "lf"
+    },
+    "linter": {
+        "rules": {
+            "recommended": false,
+            "style": {
+                "useBlockStatements": "error"
+            }
+        }
+    },
+    "assist": {
+        "actions": {
+            "source": {
+                "organizeImports": "on"
+            }
+        }
+    }
+}

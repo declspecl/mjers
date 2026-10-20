@@ -68,6 +68,7 @@ From the repository root:
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.125 --locked
 npm ci --prefix npm
+npm run format --prefix npm
 npm test --prefix npm
 npm run test:package --prefix npm
 npm pack ./npm --pack-destination npm
@@ -79,6 +80,11 @@ git and included in the npm tarball. Packing runs the build, TypeScript checks,
 and real WASM tests first. The installed package has no runtime dependencies or
 install scripts and needs no Rust toolchain. Nothing is published by building
 or packing the package.
+
+`biome.json` defines formatting for the JS/TypeScript sources: four-space
+indentation, 140-column lines, consistent imports, and braced conditionals.
+`npm test` checks formatting before building. Generated bindings and the lockfile
+are excluded from formatting.
 
 ## Publishing
 
