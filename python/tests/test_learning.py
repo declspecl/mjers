@@ -8,7 +8,7 @@ import torch
 
 from mjers._native import ACTION_COUNT, Env
 from mjers.collect import collect
-from mjers.data import concatenate, load_dataset, save_dataset
+from mjers.data import concatenate, load_dataset, load_datasets, save_dataset
 from mjers.evaluate import compare
 from mjers.model import load_policy, save_policy
 from mjers.train import EpochMetrics, TrainingConfig, train
@@ -104,6 +104,24 @@ class LearningTests(unittest.TestCase):
             concatenate([first, first])
         with self.assertRaisesRegex(ValueError, "rules"):
             concatenate([first, collect(Env("efficiency", rules="discarder-pays"), range(4, 6))])
+
+    def test_streamed_loading_matches_concatenation(self) -> None:
+        shards = [collect(Env("efficiency", rules="family"), range(start, start + 2)) for start in (0, 2, 4)]
+        with tempfile.TemporaryDirectory() as directory:
+            paths = [Path(directory) / f"shard-{i}.npz" for i in range(3)]
+            for path, shard in zip(paths, shards, strict=True):
+                save_dataset(path, shard)
+            streamed = load_datasets(paths)
+            joined = concatenate(shards)
+            self.assertEqual(streamed.metadata, joined.metadata)
+            for name in ("tiles", "context", "action_mask", "actions", "returns", "seats", "seeds"):
+                np.testing.assert_array_equal(getattr(streamed, name), getattr(joined, name))
+            with self.assertRaisesRegex(ValueError, "repeat"):
+                load_datasets([paths[0], paths[0]])
+            other = Path(directory) / "other.npz"
+            save_dataset(other, collect(Env("efficiency", rules="discarder-pays"), range(10, 12)))
+            with self.assertRaisesRegex(ValueError, "rules"):
+                load_datasets([paths[0], other])
 
 
 if __name__ == "__main__":

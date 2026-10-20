@@ -2,7 +2,7 @@
 
 import argparse
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from torch.optim import Adam, Optimizer
 
 from mjers.augment import random_relabeling, relabel_actions, relabel_mask, relabel_tiles
-from mjers.data import DecisionDataset, concatenate, load_dataset
+from mjers.data import DecisionDataset, load_dataset, load_datasets
 from mjers.model import (
     VALUE_SCALE,
     Architecture,
@@ -79,6 +79,16 @@ class PolicyBatch:
             self.tiles[indices], self.context[indices], self.action_mask[indices], self.actions[indices], self.returns[indices]
         )
 
+    def rows(self, start: int, end: int) -> "PolicyBatch":
+        return PolicyBatch(
+            self.tiles[start:end], self.context[start:end], self.action_mask[start:end], self.actions[start:end], self.returns[start:end]
+        )
+
+    def to(self, device: torch.device) -> "PolicyBatch":
+        return PolicyBatch(
+            self.tiles.to(device), self.context.to(device), self.action_mask.to(device), self.actions.to(device), self.returns.to(device)
+        )
+
     def relabeled(self, generator: torch.Generator) -> "PolicyBatch":
         """The same decisions under random tile symmetries (see `mjers.augment`)."""
         relabeling = random_relabeling(len(self.actions), generator, self.actions.device)
@@ -123,7 +133,8 @@ class TrainingResult:
     report: TrainingReport
 
 
-def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int) -> Metrics:
+def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int, device: torch.device) -> Metrics:
+    """Metrics over host-resident `data`, moving one batch at a time to `device`."""
     network.eval()
     loss = 0.0
     uniform_loss = 0.0
@@ -135,12 +146,12 @@ def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int) -> Metri
     n = len(data.actions)
     with torch.inference_mode():
         for start in range(0, n, batch_size):
-            end = start + batch_size
-            mask = data.action_mask[start:end]
-            labels = data.actions[start:end]
-            logits, value = network.heads(data.tiles[start:end], data.context[start:end], mask)
+            chunk = data.rows(start, start + batch_size).to(device)
+            mask = chunk.action_mask
+            labels = chunk.actions
+            logits, value = network.heads(chunk.tiles, chunk.context, mask)
             if value is not None:
-                value_loss += float(F.mse_loss(value, data.returns[start:end] / VALUE_SCALE, reduction="sum").item())
+                value_loss += float(F.mse_loss(value, chunk.returns / VALUE_SCALE, reduction="sum").item())
             loss += float(F.cross_entropy(logits, labels, reduction="sum").item())
             matches = logits.argmax(dim=1) == labels
             choice = mask.sum(dim=1) > 1
@@ -165,14 +176,18 @@ def train(
     manual_seed(config.seed)
     device = torch.device(config.device)
     network = build_network(config.architecture, config.hidden_width).to(device)
-    training_batch = PolicyBatch.from_dataset(training, device)
-    validation_batch = PolicyBatch.from_dataset(validation, device)
+    # Data stays in host memory; only batches visit the device.
+    host = torch.device("cpu")
+    training_batch = PolicyBatch.from_dataset(training, host)
+    validation_batch = PolicyBatch.from_dataset(validation, host)
     optimizer = Adam(network.parameters(), lr=config.learning_rate)
     generator = torch.Generator(device="cpu").manual_seed(config.seed)
     # A separate stream keeps the shuffle order independent of augmentation.
     symmetries = torch.Generator(device="cpu").manual_seed(config.seed + 1)
 
-    initial = EpochMetrics(0, measure(network, training_batch, config.batch_size), measure(network, validation_batch, config.batch_size))
+    initial = EpochMetrics(
+        0, measure(network, training_batch, config.batch_size, device), measure(network, validation_batch, config.batch_size, device)
+    )
     history = [initial]
     report_epoch(initial)
     best_epoch = 0
@@ -180,15 +195,17 @@ def train(
     best_weights = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
     for epoch in range(1, config.epochs + 1):
         network.train(True)
-        order = torch.randperm(len(training.actions), generator=generator, device="cpu").to(device)
+        order = torch.randperm(len(training.actions), generator=generator, device="cpu")
         for start in range(0, len(order), config.batch_size):
             indices = order[start : start + config.batch_size]
-            batch = training_batch.select(indices)
+            batch = training_batch.select(indices).to(device)
             if config.augment == "symmetry":
                 batch = batch.relabeled(symmetries)
             learn_batch(network, optimizer, batch, config.value_weight)
         metrics = EpochMetrics(
-            epoch, measure(network, training_batch, config.batch_size), measure(network, validation_batch, config.batch_size)
+            epoch,
+            measure(network, training_batch, config.batch_size, device),
+            measure(network, validation_batch, config.batch_size, device),
         )
         history.append(metrics)
         report_epoch(metrics)
@@ -231,10 +248,6 @@ class TrainArguments(argparse.Namespace):
     threads: int
     augment: Augmentation
     value_weight: float
-
-
-def load_datasets(paths: Sequence[Path]) -> DecisionDataset:
-    return concatenate([load_dataset(path) for path in paths])
 
 
 def main() -> None:

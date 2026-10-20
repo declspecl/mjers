@@ -120,3 +120,51 @@ def load_dataset(path: Path) -> DecisionDataset:
             seats=np.asarray(archive["seats"], dtype=np.uint8),
             seeds=np.asarray(archive["seeds"], dtype=np.uint64),
         )
+
+
+def load_datasets(paths: Sequence[Path]) -> DecisionDataset:
+    """Load and join shards like `concatenate`, holding one shard beyond the result.
+
+    Seeds and metadata are checked first from the small arrays; each field is
+    then allocated once and filled shard by shard.
+    """
+    if not paths:
+        raise ValueError("loading requires dataset paths")
+    if len(paths) == 1:
+        return load_dataset(paths[0])
+    lengths: list[int] = []
+    seeds: list[set[int]] = []
+    metadata: list[DatasetMetadata] = []
+    for path in paths:
+        with np.load(path, allow_pickle=False) as archive:
+            shard_seeds: NDArray[np.generic] = archive["seeds"]
+            lengths.append(len(shard_seeds))
+            seeds.append(set(np.unique(shard_seeds).tolist()))
+            metadata.append(msgspec.json.decode(str(np.asarray(archive["metadata"], dtype=np.str_).item()), type=DatasetMetadata))
+    if any(m != metadata[0] for m in metadata):
+        raise ValueError("concatenated datasets must share encoding, rules, and teacher")
+    if sum(len(shard) for shard in seeds) != len(set().union(*seeds)):
+        raise ValueError("concatenated datasets repeat hand seeds")
+    total = sum(lengths)
+    tiles = np.empty((total, TILE_PLANES, 34), dtype=np.float32)
+    context = np.empty((total, CONTEXT_SIZE), dtype=np.float32)
+    action_mask = np.empty((total, ACTION_COUNT), dtype=np.bool_)
+    actions = np.empty(total, dtype=np.int64)
+    returns = np.empty(total, dtype=np.float32)
+    seats = np.empty(total, dtype=np.uint8)
+    hand_seeds = np.empty(total, dtype=np.uint64)
+    start = 0
+    for path, length in zip(paths, lengths, strict=True):
+        shard = load_dataset(path)
+        if len(shard.actions) != length:
+            raise ValueError(f"{path} changed while loading")
+        end = start + length
+        tiles[start:end] = shard.tiles
+        context[start:end] = shard.context
+        action_mask[start:end] = shard.action_mask
+        actions[start:end] = shard.actions
+        returns[start:end] = shard.returns
+        seats[start:end] = shard.seats
+        hand_seeds[start:end] = shard.seeds
+        start = end
+    return DecisionDataset(metadata[0], tiles, context, action_mask, actions, returns, seats, hand_seeds)
