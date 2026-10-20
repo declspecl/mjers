@@ -31,7 +31,9 @@ pub fn strategy(name_or_path: &str) -> anyhow::Result<BotSpec> {
             network: NeuralNetwork::new(network, net),
         });
     }
-    if let Ok(HybridFile::Hybrid { name, turns, claims }) = HybridFile::deserialize(&value) {
+    let names_parts = value.get("turns").is_some_and(serde_json::Value::is_string) || value.get("claims").is_some_and(serde_json::Value::is_string);
+    if value.get("kind").and_then(serde_json::Value::as_str) == Some("hybrid") && names_parts {
+        let HybridFile::Hybrid { name, turns, claims } = HybridFile::deserialize(&value).with_context(|| format!("parsing {name_or_path}"))?;
         return Ok(BotSpec::Hybrid {
             name,
             turns: Box::new(strategy(&turns)?),
