@@ -227,3 +227,93 @@ test("both rulesets finish games, including wins, draws, and kongs", () => {
     assert.ok(draws > 0);
     assert.ok(kongs > 0);
 });
+
+/** A tiny suit-resnet-v2 checkpoint with deterministic weights. */
+function checkpoint({ architecture = "suit-resnet-v2", drop } = {}) {
+    const width = 2;
+    const layers = [];
+    const layer = (name, weight) => {
+        layers.push([`${name}.weight`, weight], [`${name}.bias`, [weight[0]]]);
+    };
+
+    layer("stem", [width, 72, 1]);
+    layer("blocks.0.suit_first", [width, width, 1, 3]);
+    layer("blocks.0.suit_second", [width, width, 1, 3]);
+    layer("blocks.0.honor_first", [width, width, 1]);
+    layer("blocks.0.honor_second", [width, width, 1]);
+    layer("blocks.0.pooled", [width, 2 * width]);
+    layer("tile_actions", [3, width, 1]);
+    layer("summary", [width, 3 * width + 22]);
+    layer("other_actions", [8, width]);
+    layer("value_layer", [1, width]);
+
+    const metadata = { architecture, dataset: { encoding_version: 1 } };
+    const header = { __metadata__: { mjers: JSON.stringify(metadata) } };
+    const values = [];
+
+    for (const [i, [name, shape]] of layers.entries()) {
+        if (name === drop) {
+            continue;
+        }
+
+        const count = shape.reduce((a, b) => a * b, 1);
+        header[name] = { dtype: "F32", shape, data_offsets: [values.length * 4, (values.length + count) * 4] };
+
+        for (let j = 0; j < count; j++) {
+            values.push(((i * 7 + j * 3) % 11) / 20 - 0.25);
+        }
+    }
+
+    const json = new TextEncoder().encode(JSON.stringify(header));
+    const bytes = new Uint8Array(8 + json.length + values.length * 4);
+
+    new DataView(bytes.buffer).setBigUint64(0, BigInt(json.length), true);
+    bytes.set(json, 8);
+    bytes.set(new Uint8Array(Float32Array.from(values).buffer), 8 + json.length);
+
+    return bytes;
+}
+
+test("networks load from checkpoint bytes, evaluate, and play legal hands", () => {
+    const network = mjers.loadNetwork(checkpoint());
+    const bot = mjers.Bot.fromNetwork(network);
+    const field = [1, 2, 3].map((i) => new mjers.Bot("efficiency", BigInt(i)));
+    const game = new mjers.Game(5n, 0);
+
+    try {
+        let evaluated = false;
+
+        while (!game.isOver()) {
+            const seat = game.toAct()[0];
+            const policy = seat === 0 ? bot : field[seat - 1];
+
+            if (seat === 0) {
+                const view = network.evaluate(game, seat);
+                const total = view.actions.reduce((sum, choice) => sum + choice.probability, 0);
+
+                assert.ok(Number.isFinite(view.settlement));
+                assert.equal(view.actions.length, game.legalActions(seat).length);
+                assert.ok(Math.abs(total - 1) < 1e-5);
+                assert.ok(view.actions.every((c, i) => i === 0 || view.actions[i - 1].probability >= c.probability));
+                assert.deepEqual(bot.choose(game, seat), view.actions[0].action);
+                evaluated = true;
+            }
+
+            game.apply(seat, policy.choose(game, seat));
+        }
+
+        assert.ok(evaluated);
+        assert.ok(game.settlement());
+    } finally {
+        for (const other of field) {
+            other.free();
+        }
+
+        bot.free();
+        network.free();
+        game.free();
+    }
+
+    assert.throws(() => mjers.loadNetwork(checkpoint({ architecture: "mlp-relu-v1" })), /suit-resnet-v2/);
+    assert.throws(() => mjers.loadNetwork(checkpoint({ drop: "summary.bias" })), /missing tensor summary.bias/);
+});

@@ -1,6 +1,7 @@
 //! Browser bindings. The core owns all game rules and decision logic.
 
 mod analysis;
+mod neural;
 mod observation;
 mod types;
 

@@ -1,5 +1,5 @@
 import createMjers, { type Action, type MjersModule } from "@mjers/mjers";
-import type { Advice, Analysis, Observation, Ruleset, Seat, Settlement } from "@mjers/mjers/types";
+import type { Advice, Analysis, NetworkEvaluation, Observation, Ruleset, Seat, Settlement } from "@mjers/mjers/types";
 
 createMjers() satisfies Promise<MjersModule>;
 
@@ -18,6 +18,11 @@ const choice = bot.choose(game, seat) satisfies Action;
 game.legalActions(seat) satisfies Action[];
 mjers.analyze(observation.hand.concealed, 0, observation.public_tiles) satisfies Analysis;
 game.settlement() satisfies Settlement | null;
+
+declare const checkpoint: ArrayBuffer;
+const network = mjers.loadNetwork(checkpoint);
+network.evaluate(game, seat) satisfies NetworkEvaluation;
+mjers.Bot.fromNetwork(network).choose(game, seat) satisfies Action;
 
 game.apply(seat, choice);
 game.apply(seat, advice.recommended);

@@ -10,7 +10,10 @@ export interface MjersModuleOptions {
     locateFile?: (path: string, prefix: string) => string | URL;
 }
 
-export type MjersModule = Pick<typeof Bindings, "Game" | "Bot" | "analyze" | "ruleset">;
+export type MjersModule = Pick<typeof Bindings, "Game" | "Bot" | "Network" | "analyze" | "ruleset"> & {
+    /** Build a network from the bytes of a suit-resnet-v2 safetensors checkpoint. Call `free()` when done. */
+    loadNetwork(checkpoint: BufferSource): Bindings.Network;
+};
 
 /** Lazy, shared initialization. Options apply to the first successful call. */
 export declare function createMjers(options?: MjersModuleOptions): Promise<MjersModule>;

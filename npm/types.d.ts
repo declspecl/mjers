@@ -129,3 +129,13 @@ export interface Analysis extends Ukeire {
     /** Non-winning 14-tile hand: sorted by shanten, then live tiles. */
     discards: DiscardOption[];
 }
+export interface NetworkChoice {
+    action: Action;
+    probability: number;
+}
+export interface NetworkEvaluation {
+    /** Predicted settlement units for this seat at the end of the hand. */
+    settlement: number;
+    /** Legal actions with the network's probabilities, most likely first. */
+    actions: NetworkChoice[];
+}

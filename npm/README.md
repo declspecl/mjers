@@ -60,6 +60,22 @@ actions throw JavaScript Errors. `game.result()` and `game.settlement()` are
 `null` until the hand ends; settlement includes win, kong, and total unit changes.
 Always release `Game` and `Bot` instances with `free()`.
 
+Trained `suit-resnet-v2` checkpoints (from `python -m mjers.train` or
+`python -m mjers.reinforce`) run in the browser too. Fetch the `.safetensors`
+bytes and load them once:
+
+```js
+const bytes = await (await fetch("policy.safetensors")).arrayBuffer();
+const network = mjers.loadNetwork(bytes);
+const bot = mjers.Bot.fromNetwork(network); // plays the most likely legal action
+const view = network.evaluate(game, seat); // { settlement, actions: [{ action, probability }] }
+```
+
+Loading checks the architecture and observation encoding in the checkpoint
+metadata. Inference is synchronous, about a millisecond per decision. The
+checkpoint's training rules are not enforced here; play it under the rules it
+was trained for. Release networks with `free()` as well.
+
 ## Build and verify
 
 From the repository root:

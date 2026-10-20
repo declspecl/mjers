@@ -23,9 +23,51 @@ async function initialize(options) {
     return Object.freeze({
         Game: bindings.Game,
         Bot: bindings.Bot,
+        Network: bindings.Network,
         analyze: bindings.analyze,
         ruleset: bindings.ruleset,
+        loadNetwork: (source) => loadNetwork(bindings, source),
     });
+}
+
+/** Build a network from the bytes of a suit-resnet-v2 safetensors checkpoint. */
+function loadNetwork(bindings, source) {
+    const bytes = ArrayBuffer.isView(source) ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength) : new Uint8Array(source);
+    const length = Number(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, true));
+    const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + length)));
+    const metadata = JSON.parse(header.__metadata__?.mjers ?? "null");
+
+    if (metadata?.architecture !== "suit-resnet-v2") {
+        throw new Error("only suit-resnet-v2 checkpoints run in the browser");
+    }
+
+    if (metadata.dataset.encoding_version !== bindings.encodingVersion()) {
+        throw new Error(`checkpoint uses observation encoding ${metadata.dataset.encoding_version}`);
+    }
+
+    const weights = new bindings.NetworkWeights();
+
+    try {
+        for (const [name, tensor] of Object.entries(header)) {
+            if (name === "__metadata__") {
+                continue;
+            }
+
+            if (tensor.dtype !== "F32") {
+                throw new Error(`${name} is not float32`);
+            }
+
+            const [begin, end] = tensor.data_offsets;
+            // Copy so the floats are aligned; safetensors and Float32Array are little-endian here.
+            const data = new Float32Array(bytes.slice(8 + length + begin, 8 + length + end).buffer);
+
+            weights.add(name, Uint32Array.from(tensor.shape), data);
+        }
+
+        return new bindings.Network(weights);
+    } finally {
+        weights.free();
+    }
 }
 
 /**

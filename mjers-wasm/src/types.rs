@@ -27,4 +27,6 @@ extern "C" {
     pub type ResultValue;
     #[wasm_bindgen(typescript_type = "Settlement | null")]
     pub type SettlementValue;
+    #[wasm_bindgen(typescript_type = "NetworkEvaluation")]
+    pub type NetworkEvaluationValue;
 }
