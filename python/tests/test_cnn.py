@@ -8,7 +8,7 @@ from torch.optim import Adam
 from mjers._native import ACTION_COUNT, CONTEXT_SIZE, TILE_PLANES, Env
 from mjers.collect import collect
 from mjers.model import PolicyNet, SuitPolicyNet, load_policy, save_policy
-from mjers.train import EpochMetrics, PolicyBatch, TrainingConfig, learn_batch, train
+from mjers.train import EpochMetrics, PolicyBatch, TrainingConfig, TrainingResult, learn_batch, train
 
 
 class SuitNetworkTests(unittest.TestCase):
@@ -67,12 +67,14 @@ class SuitNetworkTests(unittest.TestCase):
         validation = collect(Env("efficiency", rules="family"), range(100, 104))
         config = TrainingConfig("suit-cnn-relu-v1", 32, 4, 64, 0.003, 7, "cpu", 1, "none", 0.0)
         epochs: list[EpochMetrics] = []
-        result = train(training, validation, config, epochs.append)
+        best: list[TrainingResult] = []
+        result = train(training, validation, config, epochs.append, best.append)
         self.assertIsInstance(result.policy.network, SuitPolicyNet)
         self.assertEqual(result.policy.metadata.architecture, "suit-cnn-relu-v1")
         self.assertEqual(len(epochs), config.epochs + 1)
         self.assertLess(epochs[-1].training.loss, epochs[0].training.loss)
         self.assertEqual(epochs[result.report.best_epoch].validation.loss, min(epoch.validation.loss for epoch in epochs))
+        self.assertEqual(best[-1].report.best_epoch, result.report.best_epoch, "the last reported best is the final selection")
         batch = PolicyBatch.from_dataset(validation, torch.device("cpu"))
         expected = result.policy.network.forward(batch.tiles, batch.context, batch.action_mask)
         with tempfile.TemporaryDirectory() as directory:

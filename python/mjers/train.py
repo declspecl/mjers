@@ -167,7 +167,10 @@ def train(
     validation: DecisionDataset,
     config: TrainingConfig,
     report_epoch: Callable[[EpochMetrics], None],
+    report_best: Callable[["TrainingResult"], None],
 ) -> TrainingResult:
+    """`report_best` receives the policy each time validation loss improves, so
+    interrupted runs can keep their best checkpoint so far."""
     if training.metadata != validation.metadata:
         raise ValueError("training and validation must use the same encoding, rules, and teacher")
     if set(hand_seeds(training.seeds)) & set(hand_seeds(validation.seeds)):
@@ -193,6 +196,9 @@ def train(
     best_epoch = 0
     best_loss = initial.validation.loss
     best_weights = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
+    metadata = PolicyMetadata(
+        config.architecture, config.hidden_width, training.metadata, hand_seeds(training.seeds), hand_seeds(validation.seeds)
+    )
     for epoch in range(1, config.epochs + 1):
         network.train(True)
         order = torch.randperm(len(training.actions), generator=generator, device="cpu")
@@ -213,12 +219,10 @@ def train(
             best_epoch = epoch
             best_loss = metrics.validation.loss
             best_weights = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
+            report_best(TrainingResult(TrainedPolicy(network, metadata, device), TrainingReport(config, tuple(history), best_epoch)))
 
     network.load_state_dict(best_weights, strict=True)
     network.eval()
-    metadata = PolicyMetadata(
-        config.architecture, config.hidden_width, training.metadata, hand_seeds(training.seeds), hand_seeds(validation.seeds)
-    )
     return TrainingResult(TrainedPolicy(network, metadata, device), TrainingReport(config, tuple(history), best_epoch))
 
 
@@ -280,9 +284,13 @@ def main() -> None:
         args.augment,
         args.value_weight,
     )
-    result = train(load_datasets(args.training), load_dataset(args.validation), config, log_epoch)
-    save_policy(args.output, result.policy)
-    args.output.with_suffix(".training.json").write_bytes(msgspec.json.encode(result.report))
+
+    def save(result: TrainingResult) -> None:
+        save_policy(args.output, result.policy)
+        args.output.with_suffix(".training.json").write_bytes(msgspec.json.encode(result.report))
+
+    result = train(load_datasets(args.training), load_dataset(args.validation), config, log_epoch, save)
+    save(result)
     print(f"saved epoch {result.report.best_epoch} to {args.output}")
 
 

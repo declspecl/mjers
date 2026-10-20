@@ -11,7 +11,7 @@ from mjers.collect import collect
 from mjers.data import concatenate, load_dataset, load_datasets, save_dataset
 from mjers.evaluate import compare
 from mjers.model import load_policy, save_policy
-from mjers.train import EpochMetrics, TrainingConfig, train
+from mjers.train import EpochMetrics, TrainingConfig, TrainingResult, train
 
 
 class LearningTests(unittest.TestCase):
@@ -31,7 +31,8 @@ class LearningTests(unittest.TestCase):
             value_weight=0.0,
         )
         epochs: list[EpochMetrics] = []
-        result = train(training, validation, config, epochs.append)
+        best: list[TrainingResult] = []
+        result = train(training, validation, config, epochs.append, best.append)
         self.assertEqual(len(epochs), config.epochs + 1)
         self.assertLess(result.report.history[-1].training.loss, result.report.history[0].training.loss)
         self.assertGreater(result.report.best_epoch, 0)
@@ -72,11 +73,12 @@ class LearningTests(unittest.TestCase):
         training = collect(Env("efficiency", rules="family"), range(0, 2))
         config = TrainingConfig("mlp-relu-v1", 32, 1, 32, 0.001, 0, "cpu", 1, "none", 0.0)
         epochs: list[EpochMetrics] = []
+        best: list[TrainingResult] = []
         with self.assertRaisesRegex(ValueError, "overlap"):
-            train(training, training, config, epochs.append)
+            train(training, training, config, epochs.append, best.append)
         other = collect(Env("efficiency", rules="discarder-pays"), range(10, 12))
         with self.assertRaisesRegex(ValueError, "rules"):
-            train(training, other, config, epochs.append)
+            train(training, other, config, epochs.append, best.append)
         self.assertEqual(epochs, [])
 
     def test_dataset_rejects_invalid_labels_shapes_and_encoding(self) -> None:
