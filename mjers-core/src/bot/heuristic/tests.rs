@@ -121,3 +121,22 @@ fn kong_rules_gate_kongs() {
     );
     assert_eq!(never.claim(&h, tile("1m"), &[Action::Pong, Action::Kong, Action::Pass]), Action::Pass);
 }
+
+#[test]
+fn keeps_a_narrow_ready_hand() {
+    use crate::game::testing::{
+        S,
+        game,
+    };
+    // Discarding 7p waits on three live 5m; discarding a 3p leaves 39
+    // improving tiles at 1-shanten, which must not outweigh being ready.
+    let game = game(["111z222z333p666s5m", "123456789m1234z", "123456789p1119s", "1234567s99s5566z"], "7p", "");
+    let obs = game.observe(S[0]);
+    let legal = obs.legal_actions();
+    for mut bot in [HeuristicBot::efficiency(), HeuristicBot::defensive()] {
+        let Action::Discard(discard) = bot.act(&obs, &legal) else { panic!("expected a discard") };
+        let mut after = *obs.hand();
+        after.discard(discard).unwrap();
+        assert_eq!(after.shanten(), 0, "{} discarded {discard}", bot.name());
+    }
+}

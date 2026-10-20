@@ -97,7 +97,9 @@ impl HeuristicBot {
                 return danger;
             }
             let slower = (shanten - best.shanten) as f64;
-            let fewer = (best.total() as f64 - live as f64) / best.total().max(1) as f64;
+            // Slower options can have more improving tiles than the best's
+            // winning tiles; those counts are not comparable, so never reward them.
+            let fewer = (best.total() as f64 - live as f64).max(0.0) / best.total().max(1) as f64;
             slower + 0.3 * fewer + self.params.caution * danger
         };
         options

@@ -206,17 +206,20 @@ test("both rulesets finish games, including wins, draws, and kongs", () => {
     let draws = 0;
     let kongs = 0;
 
+    // Efficiency tables almost always produce a winner; random play exhausts the wall.
     for (const preset of ["family", "discarder-pays"]) {
-        for (let seed = 0n; seed < 24n; seed++) {
-            const { result } = play(seed, "efficiency", mjers.ruleset(preset));
+        for (const strategy of ["efficiency", "random"]) {
+            for (let seed = 0n; seed < 24n; seed++) {
+                const { result } = play(seed, strategy, mjers.ruleset(preset));
 
-            if (result.win) {
-                wins++;
-            } else {
-                draws++;
+                if (result.win) {
+                    wins++;
+                } else {
+                    draws++;
+                }
+
+                kongs += result.kongs.length;
             }
-
-            kongs += result.kongs.length;
         }
     }
 

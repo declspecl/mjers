@@ -9,7 +9,7 @@ pub mod observation;
 pub mod position;
 pub mod rng;
 #[cfg(test)]
-mod testing;
+pub(crate) mod testing;
 pub mod trace;
 pub mod wall;
 
