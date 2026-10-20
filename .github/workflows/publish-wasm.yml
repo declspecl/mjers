@@ -1,0 +1,49 @@
+name: Publish @mjers/mjers
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-mjers-mjers
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Check release tag
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('npm/package.json', 'utf8'));
+          assert.equal(pkg.name, '@mjers/mjers');
+          assert.equal(process.env.GITHUB_REF_NAME, `v${pkg.version}`, 'release tag must match the npm package version');
+          JS
+      - run: cargo install wasm-bindgen-cli --version 0.2.125 --locked
+      - run: npm ci --prefix npm
+      - run: npm test --prefix npm
+      - run: npm run test:package --prefix npm
+      - name: Publish package with provenance
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            npm config set //registry.npmjs.org/:_authToken "$NODE_AUTH_TOKEN" --location=user
+          fi
+          npm publish --provenance --access public --ignore-scripts

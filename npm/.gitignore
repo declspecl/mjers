@@ -1,0 +1,6 @@
+/node_modules
+/mjers_wasm.js
+/mjers_wasm.d.ts
+/mjers_wasm_bg.wasm
+/mjers_wasm_bg.wasm.d.ts
+/*.tgz

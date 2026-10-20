@@ -25,3 +25,20 @@ jobs:
       - run: uv run --no-sync ruff format --check python
       - run: uv run --no-sync mypy
       - run: uv run --no-sync python -m unittest discover -s python/tests -v
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: npm/package-lock.json
+      - run: cargo install wasm-bindgen-cli --version 0.2.125 --locked
+      - run: npm ci --prefix npm
+      - run: npm test --prefix npm
+      - run: npm run test:package --prefix npm

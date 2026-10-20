@@ -1,0 +1,53 @@
+{
+    "name": "@mjers/mjers",
+    "version": "0.1.0",
+    "description": "Deterministic mahjong engine, hand analysis, bots, and advisor (WebAssembly)",
+    "type": "module",
+    "main": "./index.js",
+    "types": "./index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./index.d.ts",
+            "default": "./index.js"
+        },
+        "./types": {
+            "types": "./types.d.ts",
+            "default": "./types.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "types.js",
+        "types.d.ts",
+        "mjers_wasm.js",
+        "mjers_wasm.d.ts",
+        "mjers_wasm_bg.wasm"
+    ],
+    "scripts": {
+        "build": "node ../scripts/build-wasm.mjs",
+        "check-types": "tsc -p tsconfig.json",
+        "test": "npm run build && npm run check-types && node --test tests/*.test.mjs",
+        "test:package": "node ../scripts/check-npm-package.mjs",
+        "prepack": "npm test"
+    },
+    "devDependencies": {
+        "typescript": "5.9.3"
+    },
+    "keywords": [
+        "mahjong",
+        "advisor",
+        "wasm",
+        "webassembly"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/declspecl/mjers.git"
+    },
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org"
+    }
+}
