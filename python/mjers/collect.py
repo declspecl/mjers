@@ -1,6 +1,7 @@
 """Collect one imitation-data shard from complete teacher-played hands."""
 
 import argparse
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -9,8 +10,20 @@ from numpy import stack
 from mjers._native import ENCODING_VERSION, Env, Observation
 from mjers.data import DatasetMetadata, DecisionDataset, save_dataset
 
+type Behavior = Callable[[Observation, int], int]
+"""Chooses the action actually played from an observation and the teacher's label."""
+
+
+def follow_teacher(observation: Observation, teacher: int) -> int:
+    return teacher
+
 
 def collect(env: Env, seeds: range) -> DecisionDataset:
+    return collect_with(env, seeds, follow_teacher)
+
+
+def collect_with(env: Env, seeds: range, behavior: Behavior) -> DecisionDataset:
+    """Teacher labels for every decision of hands played by `behavior`."""
     if len(seeds) == 0:
         raise ValueError("collection requires hand seeds")
     observations: list[Observation] = []
@@ -24,7 +37,7 @@ def collect(env: Env, seeds: range) -> DecisionDataset:
             observations.append(observation)
             actions.append(env.teacher_action())
             hand_seeds.append(seed)
-            transition = env.step(actions[-1])
+            transition = env.step(behavior(observation, actions[-1]))
             observation = transition.observation
             if transition.terminated:
                 returns.extend(transition.rewards[row.seat] for row in observations[first:])
