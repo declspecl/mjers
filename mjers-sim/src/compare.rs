@@ -27,6 +27,9 @@ pub struct Comparison {
     pub field: String,
     /// (seed, seat) pairs played by both candidates.
     pub pairs: u64,
+    /// Independent walls behind `stderr`; absent from reports written before it.
+    #[serde(default)]
+    pub walls: u64,
     /// Mean of A's units minus B's units per hand, on identical deals.
     pub mean_difference: f64,
     /// Standard error across walls: a wall's four seat rotations share its
@@ -116,6 +119,7 @@ pub fn compare(
         b: b.name().to_string(),
         field: field.name().to_string(),
         pairs: paired.pairs,
+        walls: paired.walls,
         mean_difference: mean,
         stderr: (variance / walls).sqrt(),
         a_stats: paired.a,
@@ -134,7 +138,7 @@ mod tests {
     #[test]
     fn identical_candidates_tie_exactly() {
         let c = compare(&Ruleset::family(), &preset("efficiency"), &preset("efficiency"), &preset("efficiency"), Seeds { start: 0, count: 50 }).unwrap();
-        assert_eq!(c.pairs, 200);
+        assert_eq!((c.pairs, c.walls), (200, 50));
         assert_eq!((c.mean_difference, c.stderr), (0.0, 0.0));
         assert_eq!(c.a_stats, c.b_stats);
     }
