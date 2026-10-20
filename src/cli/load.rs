@@ -31,6 +31,13 @@ pub fn strategy(name_or_path: &str) -> anyhow::Result<BotSpec> {
             network: NeuralNetwork::new(network, net),
         });
     }
+    if let Ok(HybridFile::Hybrid { name, turns, claims }) = HybridFile::deserialize(&value) {
+        return Ok(BotSpec::Hybrid {
+            name,
+            turns: Box::new(strategy(&turns)?),
+            claims: Box::new(strategy(&claims)?),
+        });
+    }
     serde_json::from_value(value).with_context(|| format!("parsing {name_or_path}"))
 }
 
@@ -41,16 +48,32 @@ enum NeuralFile {
     Neural { name: String, network: String },
 }
 
+/// `{"kind": "hybrid", "name": ..., "turns": "<strategy>", "claims": "<strategy>"}`,
+/// naming each part by preset or file so neural parts can load their weights.
+/// Hybrids with inline strategy objects parse as ordinary `BotSpec` JSON.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum HybridFile {
+    Hybrid { name: String, turns: String, claims: String },
+}
+
 /// Neural strategies may not play under other rules or on seeds they trained on.
 pub fn check_unseen(
     spec: &BotSpec,
     rules: &Ruleset,
     seeds: Seeds,
 ) -> anyhow::Result<()> {
-    if let BotSpec::Neural { name, network } = spec {
-        checkpoint::read_metadata(network.checkpoint())?
-            .check_unseen(rules, seeds)
-            .with_context(|| format!("strategy {name}"))?;
+    match spec {
+        BotSpec::Neural { name, network } => {
+            checkpoint::read_metadata(network.checkpoint())?
+                .check_unseen(rules, seeds)
+                .with_context(|| format!("strategy {name}"))?;
+        },
+        BotSpec::Hybrid { turns, claims, .. } => {
+            check_unseen(turns, rules, seeds)?;
+            check_unseen(claims, rules, seeds)?;
+        },
+        _ => {},
     }
     Ok(())
 }

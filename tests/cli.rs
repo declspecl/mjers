@@ -235,5 +235,12 @@ fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
     assert!(!overlap.status.success() && String::from_utf8_lossy(&overlap.stderr).contains("overlap"));
     let rules = mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "100", "--rules", "discarder-pays"], "");
     assert!(!rules.status.success() && String::from_utf8_lossy(&rules.stderr).contains("different rules"));
+    let hybrid = dir.join("hybrid.json");
+    std::fs::write(&hybrid, serde_json::json!({"kind": "hybrid", "name": "net-turns", "turns": path, "claims": "efficiency"}).to_string()).unwrap();
+    let hybrid = hybrid.to_str().unwrap();
+    let out = stdout(&mj(&["compare", hybrid, "efficiency", "--hands", "4", "--seed", "100"], ""));
+    assert!(out.contains("net-turns vs efficiency"), "{out}");
+    let nested = mj(&["compare", hybrid, "efficiency", "--hands", "4", "--seed", "0"], "");
+    assert!(!nested.status.success() && String::from_utf8_lossy(&nested.stderr).contains("overlap"), "hybrid parts are checked");
     std::fs::remove_dir_all(dir).unwrap();
 }

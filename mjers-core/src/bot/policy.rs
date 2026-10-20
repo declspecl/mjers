@@ -5,7 +5,10 @@ use crate::game::action::{
     Action,
     GameError,
 };
-use crate::game::observation::Observation;
+use crate::game::observation::{
+    Decision,
+    Observation,
+};
 use crate::game::rng::Rng;
 use crate::rules::seat::Seat;
 
@@ -46,6 +49,41 @@ impl Policy for RandomBot {
     ) -> Action {
         let pick = self.rng.below(legal.len() as u64) as usize;
         legal.get(pick).copied().unwrap_or(Action::Pass)
+    }
+}
+
+/// Turn decisions (discards and kongs) from one policy, claim responses from another.
+/// Comparing hybrids attributes a strategy's edge to one kind of decision.
+pub struct HybridBot {
+    name: String,
+    turns: Box<dyn Policy>,
+    claims: Box<dyn Policy>,
+}
+
+impl HybridBot {
+    pub fn new(
+        name: impl Into<String>,
+        turns: Box<dyn Policy>,
+        claims: Box<dyn Policy>,
+    ) -> HybridBot {
+        HybridBot { name: name.into(), turns, claims }
+    }
+}
+
+impl Policy for HybridBot {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn act(
+        &mut self,
+        observation: &Observation<'_>,
+        legal: &[Action],
+    ) -> Action {
+        match observation.decision() {
+            Decision::Claim { .. } => self.claims.act(observation, legal),
+            Decision::Turn { .. } | Decision::None => self.turns.act(observation, legal),
+        }
     }
 }
 
@@ -101,5 +139,45 @@ mod tests {
         play_out(&mut a, &mut random_table(9)).unwrap();
         play_out(&mut b, &mut random_table(9)).unwrap();
         assert_eq!(a.steps(), b.steps());
+    }
+
+    #[test]
+    fn hybrids_route_turns_and_claims_to_their_policies() {
+        use crate::bot::heuristic::HeuristicBot;
+        use crate::bot::params::{
+            ClaimRule,
+            Params,
+        };
+
+        let rules = Arc::new(Ruleset::family());
+        let never_claims = || {
+            HeuristicBot::new(
+                "closed",
+                Params {
+                    chow: ClaimRule::Never,
+                    pong: ClaimRule::Never,
+                    ..Params::efficiency()
+                },
+            )
+        };
+        let mut changed = false;
+        for seed in 0..20 {
+            let play = |seat_zero: Box<dyn Policy>| {
+                let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
+                let mut table: [Box<dyn Policy>; 4] = std::array::from_fn(|_| Box::new(HeuristicBot::efficiency()) as Box<dyn Policy>);
+                table[0] = seat_zero;
+                play_out(&mut game, &mut table).unwrap();
+                game.steps().to_vec()
+            };
+            let plain = play(Box::new(HeuristicBot::efficiency()));
+            assert_eq!(
+                play(Box::new(HybridBot::new("same", Box::new(HeuristicBot::efficiency()), Box::new(HeuristicBot::efficiency())))),
+                plain
+            );
+            // Turns follow the first policy: the closed bot's discards equal efficiency's.
+            assert_eq!(play(Box::new(HybridBot::new("turns", Box::new(never_claims()), Box::new(HeuristicBot::efficiency())))), plain);
+            changed |= play(Box::new(HybridBot::new("claims", Box::new(HeuristicBot::efficiency()), Box::new(never_claims())))) != plain;
+        }
+        assert!(changed, "claim responses come from the second policy");
     }
 }

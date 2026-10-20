@@ -14,9 +14,11 @@ use crate::bot::neural::{
 };
 use crate::bot::params::Params;
 use crate::bot::policy::{
+    HybridBot,
     Policy,
     RandomBot,
 };
+use crate::game::rng::derive_seed;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -40,6 +42,12 @@ pub enum BotSpec {
         name: String,
         network: NeuralNetwork,
     },
+    /// Turn decisions from `turns`, claim responses from `claims`.
+    Hybrid {
+        name: String,
+        turns: Box<BotSpec>,
+        claims: Box<BotSpec>,
+    },
 }
 
 impl BotSpec {
@@ -62,7 +70,7 @@ impl BotSpec {
 
     pub fn name(&self) -> &str {
         match self {
-            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } | BotSpec::Neural { name, .. } => name,
+            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } | BotSpec::Neural { name, .. } | BotSpec::Hybrid { name, .. } => name,
         }
     }
 
@@ -76,6 +84,7 @@ impl BotSpec {
             BotSpec::Heuristic { name, params } => Box::new(HeuristicBot::new(name.clone(), params.clone())),
             BotSpec::Advisor { name, advice } => Box::new(AdvisorBot::new(name.clone(), (**advice).clone(), seed)),
             BotSpec::Neural { name, network } => Box::new(NeuralBot::new(name.clone(), network.net().clone())),
+            BotSpec::Hybrid { name, turns, claims } => Box::new(HybridBot::new(name.clone(), turns.build(derive_seed(seed, 0)), claims.build(derive_seed(seed, 1)))),
         }
     }
 }
@@ -92,6 +101,14 @@ mod tests {
             assert_eq!(serde_json::from_str::<BotSpec>(&json).unwrap(), spec);
             assert_eq!(spec.build(0).name(), name);
         }
+    }
+
+    #[test]
+    fn hybrids_round_trip_and_name_themselves() {
+        let json = r#"{"kind": "hybrid", "name": "mixed", "turns": {"kind": "heuristic", "name": "efficiency"}, "claims": {"kind": "random", "name": "random"}}"#;
+        let spec: BotSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(serde_json::from_str::<BotSpec>(&serde_json::to_string(&spec).unwrap()).unwrap(), spec);
+        assert_eq!(spec.build(3).name(), "mixed");
     }
 
     #[test]
