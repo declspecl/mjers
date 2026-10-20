@@ -127,3 +127,15 @@ fn choices_are_a_distribution_over_legal_actions() {
     assert!(choices.windows(2).all(|w| w[0].1 >= w[1].1));
     assert_eq!(encoding::action_index(choices[0].0, observation.decision()), net.evaluate(&encoding::encode(&observation)).best());
 }
+
+#[test]
+fn networks_serialize_as_their_checkpoint_and_need_weights_to_load() {
+    let spec = BotSpec::Neural {
+        name: "net".into(),
+        network: NeuralNetwork::new("runs/policy.safetensors", ResidualNet::new(&random_weights(2, 1, 5)).unwrap()),
+    };
+    let json = serde_json::to_string(&spec).unwrap();
+    assert_eq!(json, r#"{"kind":"neural","name":"net","network":"runs/policy.safetensors"}"#);
+    let error = serde_json::from_str::<BotSpec>(&json).unwrap_err().to_string();
+    assert!(error.contains("checkpoint weights"), "{error}");
+}
