@@ -250,5 +250,7 @@ fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
     assert!(advised.contains("network: "), "{advised}");
     let study = mj(&["study", "--strategy", path, "--hands", "2", "--seed", "0"], "");
     assert!(!study.status.success() && String::from_utf8_lossy(&study.stderr).contains("overlap"), "studies are checked too");
+    let tune = mj(&["tune", "--field", path, "--hands", "1", "--rounds", "1", "--seed", "0"], "");
+    assert!(!tune.status.success() && String::from_utf8_lossy(&tune.stderr).contains("overlap"), "tuning fields are checked");
     std::fs::remove_dir_all(dir).unwrap();
 }
