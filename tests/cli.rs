@@ -199,7 +199,7 @@ fn write_checkpoint(path: &std::path::Path) {
         "dataset": {"encoding_version": 1, "rules_json": rules, "teacher_json": "{}"},
         "training_seeds": [0],
         "validation_seeds": [1],
-        "reinforcement": [],
+        "reinforcement": [{"field_json": "{}", "start_seed": 500, "hands": 10}],
     });
     let mut header = serde_json::Map::new();
     header.insert("__metadata__".into(), serde_json::json!({"mjers": metadata.to_string()}));
@@ -233,6 +233,8 @@ fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
     assert!(json.contains(checkpoint.to_str().unwrap()), "reports name the checkpoint: {json}");
     let overlap = mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "0"], "");
     assert!(!overlap.status.success() && String::from_utf8_lossy(&overlap.stderr).contains("overlap"));
+    let reinforced = mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "508"], "");
+    assert!(!reinforced.status.success() && String::from_utf8_lossy(&reinforced.stderr).contains("overlap"), "PPO seeds are checked");
     let rules = mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "100", "--rules", "discarder-pays"], "");
     assert!(!rules.status.success() && String::from_utf8_lossy(&rules.stderr).contains("different rules"));
     let hybrid = dir.join("hybrid.json");
