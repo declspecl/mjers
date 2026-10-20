@@ -46,7 +46,14 @@ class ReinforcementTests(unittest.TestCase):
         before = {name: tensor.clone() for name, tensor in initial.network.state_dict().items()}
         env = Env("efficiency", rules="family")
         reports: list[IterationReport] = []
-        policy, history = reinforce(initial, env.teacher_json, "family", config(500), reports.append)
+        snapshots: list[range] = []
+
+        def record(report: IterationReport, snapshot: TrainedPolicy) -> None:
+            reports.append(report)
+            snapshots.append(snapshot.metadata.reinforcement[-1].seeds())
+
+        policy, history = reinforce(initial, env.teacher_json, "family", config(500), record)
+        self.assertEqual(snapshots, [range(500, 506), range(500, 512)])
         self.assertEqual(len(history), 2)
         self.assertEqual(reports, list(history))
         self.assertTrue(all(report.hands == 6 and report.decisions > 0 for report in history))
@@ -57,7 +64,7 @@ class ReinforcementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "overlap"):
             compare(policy, env, range(510, 514), "all")
         with self.assertRaisesRegex(ValueError, "overlap"):
-            reinforce(policy, env.teacher_json, "family", config(505), reports.append)
+            reinforce(policy, env.teacher_json, "family", config(505), record)
         self.assertEqual(compare(policy, env, range(600, 602), "all").seeds, (600, 601))
 
 

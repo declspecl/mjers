@@ -282,8 +282,9 @@ def reinforce(
     field_json: str,
     rules_json: str,
     config: ReinforcementConfig,
-    report_iteration: Callable[[IterationReport], None],
+    report_iteration: Callable[[IterationReport, TrainedPolicy], None],
 ) -> tuple[TrainedPolicy, tuple[IterationReport, ...]]:
+    """`report_iteration` also receives the policy so far, whose metadata covers only hands played."""
     network = policy.network
     if not isinstance(network, ResidualPolicyNet):
         raise ValueError("reinforcement needs a policy with a value head (suit-resnet-v2)")
@@ -322,10 +323,14 @@ def reinforce(
             len(units) / (time.perf_counter() - began),
         )
         reports.append(report)
-        report_iteration(report)
+        report_iteration(report, played(policy, network, replace(stage, hands=iteration * config.hands_per_iteration), device))
     network.eval()
-    metadata = replace(policy.metadata, reinforcement=(*policy.metadata.reinforcement, stage))
-    return TrainedPolicy(network, metadata, device), tuple(reports)
+    return played(policy, network, stage, device), tuple(reports)
+
+
+def played(initial: TrainedPolicy, network: ResidualPolicyNet, stage: Reinforcement, device: torch.device) -> TrainedPolicy:
+    metadata = replace(initial.metadata, reinforcement=(*initial.metadata.reinforcement, stage))
+    return TrainedPolicy(network, metadata, device)
 
 
 class ReinforceArguments(argparse.Namespace):
@@ -347,6 +352,7 @@ class ReinforceArguments(argparse.Namespace):
     start_seed: int
     device: DeviceName
     threads: int
+    checkpoint_every: int
 
 
 def main() -> None:
@@ -369,7 +375,10 @@ def main() -> None:
     parser.add_argument("--start-seed", type=int, required=True, help="first hand seed; hands use a disjoint consecutive block")
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), required=True)
     parser.add_argument("--threads", type=int, required=True)
+    parser.add_argument("--checkpoint-every", type=int, required=True, help="also save the output every this many iterations")
     args = parser.parse_args(namespace=ReinforceArguments())
+    if args.checkpoint_every <= 0:
+        parser.error("--checkpoint-every must be positive")
     config = ReinforcementConfig(
         args.iterations,
         args.hands_per_iteration,
@@ -388,15 +397,22 @@ def main() -> None:
     )
     initial = load_policy(args.checkpoint, torch.device(args.device))
     field_json = Env(teacher=read_spec(args.field), rules=read_spec(args.rules)).teacher_json
-    policy, iterations = reinforce(initial, field_json, read_spec(args.rules), config, log_iteration)
-    save_policy(args.output, policy)
-    report = ReinforcementReport(config, field_json, str(args.checkpoint), iterations)
-    args.output.with_suffix(".reinforcement.json").write_bytes(msgspec.json.encode(report))
+    history: list[IterationReport] = []
+
+    def save(policy: TrainedPolicy) -> None:
+        save_policy(args.output, policy)
+        report = ReinforcementReport(config, field_json, str(args.checkpoint), tuple(history))
+        args.output.with_suffix(".reinforcement.json").write_bytes(msgspec.json.encode(report))
+
+    def log_iteration(report: IterationReport, policy: TrainedPolicy) -> None:
+        history.append(report)
+        print(msgspec.json.encode(report).decode(), flush=True)
+        if report.iteration % args.checkpoint_every == 0:
+            save(policy)
+
+    policy, _ = reinforce(initial, field_json, read_spec(args.rules), config, log_iteration)
+    save(policy)
     print(f"saved {args.output}")
-
-
-def log_iteration(report: IterationReport) -> None:
-    print(msgspec.json.encode(report).decode(), flush=True)
 
 
 if __name__ == "__main__":
