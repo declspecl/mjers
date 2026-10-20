@@ -1,10 +1,12 @@
-"""Improve a policy with a value head by playing one seat against a fixed field (PPO).
+"""Improve a policy with a value head by playing one seat against a field (PPO).
 
-Each hand, the student plays one randomly chosen seat; the other three follow
-the environment's teacher, which here is the opponent field. The only reward is
-the student's settlement, scaled by `VALUE_SCALE`; advantages use the value
-head with generalized advantage estimation over the student's own decisions.
-Available wins are always taken and single-action decisions are not learned.
+Each hand, the student plays one randomly chosen seat in a Rust `Arena`; the
+other three seats are the opponent field: a fixed strategy, or with
+`--snapshot-every N` a frozen copy of the student refreshed every N iterations
+(self-play). The only reward is the student's settlement, scaled by
+`VALUE_SCALE`; advantages use the value head with generalized advantage
+estimation over the student's own decisions. Available wins are always taken
+and single-action decisions are not learned.
 """
 
 import argparse
