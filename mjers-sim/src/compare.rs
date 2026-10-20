@@ -29,6 +29,8 @@ pub struct Comparison {
     pub pairs: u64,
     /// Mean of A's units minus B's units per hand, on identical deals.
     pub mean_difference: f64,
+    /// Standard error across walls: a wall's four seat rotations share its
+    /// tiles, so they are averaged before measuring spread.
     pub stderr: f64,
     pub a_stats: Stats,
     pub b_stats: Stats,
@@ -43,9 +45,11 @@ impl Comparison {
 
 #[derive(Default)]
 struct Paired {
-    n: u64,
+    pairs: u64,
     sum: i64,
-    sum_squared: u64,
+    walls: u64,
+    /// Sum over walls of the squared mean seat difference.
+    wall_sum_squared: f64,
     a: Stats,
     b: Stats,
 }
@@ -55,9 +59,10 @@ impl Paired {
         mut self,
         other: Paired,
     ) -> Paired {
-        self.n += other.n;
+        self.pairs += other.pairs;
         self.sum += other.sum;
-        self.sum_squared += other.sum_squared;
+        self.walls += other.walls;
+        self.wall_sum_squared += other.wall_sum_squared;
         self.a.merge(&other.a);
         self.b.merge(&other.b);
         self
@@ -65,7 +70,7 @@ impl Paired {
 }
 
 /// Each seed is played eight times: A in each of the four seats, then B in
-/// each, with `field` in the other seats.
+/// each, with `field` in the other seats. Walls are the independent units.
 pub fn compare(
     rules: &Ruleset,
     a: &BotSpec,
@@ -76,35 +81,43 @@ pub fn compare(
     let rules = Arc::new(rules.clone());
     let with = |candidate: &BotSpec, seat: Seat| -> Table { std::array::from_fn(|i| if i == seat.index() { candidate.clone() } else { field.clone() }) };
     let paired = par_try_fold(
-        seeds.count * 4,
+        seeds.count,
         |acc: &mut Paired, i| {
-            let seed = seeds.start.wrapping_add(i / 4);
-            let seat = Seat::ALL[(i % 4) as usize];
-            let game_a = play_hand(&rules, &with(a, seat), seed)?;
-            let game_b = play_hand(&rules, &with(b, seat), seed)?;
-            if let (Some(units_a), Some(units_b)) = (game_a.settlement(), game_b.settlement()) {
-                let diff = (units_a.total()[seat.index()] - units_b.total()[seat.index()]) as i64;
-                acc.n += 1;
-                acc.sum += diff;
-                acc.sum_squared += (diff * diff) as u64;
-                acc.a.record(&game_a, seat);
-                acc.b.record(&game_b, seat);
+            let seed = seeds.start.wrapping_add(i);
+            let (mut wall_sum, mut wall_pairs) = (0i64, 0u64);
+            for seat in Seat::ALL {
+                let game_a = play_hand(&rules, &with(a, seat), seed)?;
+                let game_b = play_hand(&rules, &with(b, seat), seed)?;
+                if let (Some(units_a), Some(units_b)) = (game_a.settlement(), game_b.settlement()) {
+                    wall_sum += (units_a.total()[seat.index()] - units_b.total()[seat.index()]) as i64;
+                    wall_pairs += 1;
+                    acc.a.record(&game_a, seat);
+                    acc.b.record(&game_b, seat);
+                }
+            }
+            if wall_pairs > 0 {
+                let wall_mean = wall_sum as f64 / wall_pairs as f64;
+                acc.pairs += wall_pairs;
+                acc.sum += wall_sum;
+                acc.walls += 1;
+                acc.wall_sum_squared += wall_mean * wall_mean;
             }
             Ok(())
         },
         Paired::merge,
     )?;
 
-    let n = paired.n.max(1) as f64;
-    let mean = paired.sum as f64 / n;
-    let variance = (paired.sum_squared as f64 / n - mean * mean).max(0.0) * n / (n - 1.0).max(1.0);
+    // Every wall has four pairs, so the overall mean is also the mean of wall means.
+    let mean = paired.sum as f64 / paired.pairs.max(1) as f64;
+    let walls = paired.walls.max(1) as f64;
+    let variance = (paired.wall_sum_squared / walls - mean * mean).max(0.0) * walls / (walls - 1.0).max(1.0);
     Ok(Comparison {
         a: a.name().to_string(),
         b: b.name().to_string(),
         field: field.name().to_string(),
-        pairs: paired.n,
+        pairs: paired.pairs,
         mean_difference: mean,
-        stderr: (variance / n).sqrt(),
+        stderr: (variance / walls).sqrt(),
         a_stats: paired.a,
         b_stats: paired.b,
     })
