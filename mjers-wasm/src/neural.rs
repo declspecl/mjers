@@ -71,21 +71,7 @@ impl Network {
         let player = game.acting_seat(player)?;
         let observation = game.inner.observe(player);
         let evaluation = self.net.evaluate(&encoding::encode(&observation));
-        let legal: Vec<(Action, f32)> = observation
-            .legal_actions()
-            .iter()
-            .filter_map(|&action| encoding::action_index(action, observation.decision()).map(|index| (action, evaluation.logits[index])))
-            .collect();
-        let top = legal.iter().map(|&(_, logit)| logit).fold(f32::NEG_INFINITY, f32::max);
-        let total: f32 = legal.iter().map(|&(_, logit)| (logit - top).exp()).sum();
-        let mut actions: Vec<Choice> = legal
-            .into_iter()
-            .map(|(action, logit)| Choice {
-                action,
-                probability: (logit - top).exp() / total,
-            })
-            .collect();
-        actions.sort_by(|a, b| b.probability.total_cmp(&a.probability));
+        let actions = evaluation.choices(&observation).into_iter().map(|(action, probability)| Choice { action, probability }).collect();
         #[derive(Serialize)]
         struct Evaluation {
             settlement: f32,

@@ -12,12 +12,16 @@ use mjers_core::advisor::{
     AdviceConfig,
     advise,
 };
+use mjers_core::bot::encoding;
+use mjers_core::bot::neural::NeuralNetwork;
 use mjers_core::bot::policy::{
     Policy,
     decide,
 };
+use mjers_core::bot::spec::BotSpec;
 use mjers_core::game::Game;
 use mjers_core::game::action::Action;
+use mjers_core::game::observation::Observation;
 use mjers_core::game::rng::derive_seed;
 use mjers_core::game::trace::Event;
 use mjers_core::rules::seat::Seat;
@@ -46,6 +50,9 @@ pub struct Args {
     /// Playouts per candidate for hints; 0 for instant hints.
     #[arg(long, default_value_t = 0)]
     hint_samples: u32,
+    /// Also show a neural strategy's top choices and predicted settlement.
+    #[arg(long)]
+    hint_network: Option<String>,
     /// Let a bot play your seat too and show every tile.
     #[arg(long)]
     watch: bool,
@@ -54,6 +61,11 @@ pub struct Args {
 pub fn run(args: Args) -> anyhow::Result<()> {
     let rules = Arc::new(load::ruleset(&args.rules)?);
     let opponents = load::strategy(&args.opponents)?;
+    let network = match args.hint_network.as_deref().map(load::strategy).transpose()? {
+        Some(BotSpec::Neural { network, .. }) => Some(network),
+        Some(_) => bail!("--hint-network needs a neural strategy file"),
+        None => None,
+    };
     let seed = args.seed.unwrap_or_else(clock_seed);
     let human = Seat::new(args.seat).context("seat must be 0-3")?;
     let mut game = Game::new(rules, seed, Seat::ALL[(seed % 4) as usize])?;
@@ -76,6 +88,9 @@ pub fn run(args: Args) -> anyhow::Result<()> {
                 };
                 print_advice(&advise(&game.observe(seat), &config), 3)?;
             }
+            if let Some(network) = &network {
+                print_network(network, &game.observe(seat))?;
+            }
             prompt(&game, seat, &mut lines)?
         } else {
             decide(&game, seat, &mut *policies[seat.index()])
@@ -87,6 +102,15 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         say!("result: {:?}", settlement.total())?;
     }
     Ok(())
+}
+
+fn print_network(
+    network: &NeuralNetwork,
+    observation: &Observation<'_>,
+) -> std::io::Result<()> {
+    let evaluation = network.net().evaluate(&encoding::encode(observation));
+    let top: Vec<String> = evaluation.choices(observation).iter().take(3).map(|(action, p)| format!("{action} {:.0}%", 100.0 * p)).collect();
+    say!("network: {} (expects {:+.1} units)", top.join(", "), evaluation.settlement)
 }
 
 fn clock_seed() -> u64 {

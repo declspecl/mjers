@@ -255,6 +255,23 @@ pub struct Evaluation {
 }
 
 impl Evaluation {
+    /// Each legal action of `observation` with its softmax probability, most likely first.
+    pub fn choices(
+        &self,
+        observation: &Observation<'_>,
+    ) -> Vec<(Action, f32)> {
+        let legal: Vec<(Action, f32)> = observation
+            .legal_actions()
+            .iter()
+            .filter_map(|&action| encoding::action_index(action, observation.decision()).map(|index| (action, self.logits[index])))
+            .collect();
+        let top = legal.iter().map(|&(_, logit)| logit).fold(f32::NEG_INFINITY, f32::max);
+        let total: f32 = legal.iter().map(|&(_, logit)| (logit - top).exp()).sum();
+        let mut choices: Vec<(Action, f32)> = legal.into_iter().map(|(action, logit)| (action, (logit - top).exp() / total)).collect();
+        choices.sort_by(|a, b| b.1.total_cmp(&a.1));
+        choices
+    }
+
     /// The highest legal logit, first index on ties (as `torch.argmax`).
     pub fn best(&self) -> Option<usize> {
         let mut best: Option<usize> = None;

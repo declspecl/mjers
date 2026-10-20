@@ -242,6 +242,8 @@ fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
     assert!(out.contains("net-turns vs efficiency"), "{out}");
     let nested = mj(&["compare", hybrid, "efficiency", "--hands", "4", "--seed", "0"], "");
     assert!(!nested.status.success() && String::from_utf8_lossy(&nested.stderr).contains("overlap"), "hybrid parts are checked");
+    let hinted = mj(&["play", "--seed", "7", "--hint-network", path], "");
+    assert!(String::from_utf8_lossy(&hinted.stdout).contains("network: "), "play shows network hints");
     let study = mj(&["study", "--strategy", path, "--hands", "2", "--seed", "0"], "");
     assert!(!study.status.success() && String::from_utf8_lossy(&study.stderr).contains("overlap"), "studies are checked too");
     std::fs::remove_dir_all(dir).unwrap();

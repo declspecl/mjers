@@ -115,3 +115,15 @@ fn plays_complete_hands_with_legal_actions() {
         assert!(game.is_over());
     }
 }
+
+#[test]
+fn choices_are_a_distribution_over_legal_actions() {
+    let net = ResidualNet::new(&random_weights(4, 1, 4)).unwrap();
+    let game = Game::new(Arc::new(Ruleset::family()), 8, Seat::ALL[0]).unwrap();
+    let observation = game.observe(Seat::ALL[0]);
+    let choices = net.evaluate(&encoding::encode(&observation)).choices(&observation);
+    assert_eq!(choices.len(), observation.legal_actions().len());
+    assert!((choices.iter().map(|&(_, p)| p).sum::<f32>() - 1.0).abs() < 1e-5);
+    assert!(choices.windows(2).all(|w| w[0].1 >= w[1].1));
+    assert_eq!(encoding::action_index(choices[0].0, observation.decision()), net.evaluate(&encoding::encode(&observation)).best());
+}
