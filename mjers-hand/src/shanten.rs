@@ -6,7 +6,8 @@
 //!
 //! Like the standard formula, this ignores the four-copy limit: a hand holding
 //! all four copies of a tile can count a wait on a fifth (2347777m reads as
-//! ready on 7m). `waits` and ukeire exclude such tiles, so decisions are unaffected.
+//! ready on 7m). `waits` and ukeire exclude such tiles, but policies comparing
+//! shanten still use this theoretical distance, not a copy-limited distance.
 //!
 //! Suits and honors never share a set, so each of the four groups (three
 //! suits, then honors) is summarised on its own and the summaries combined.

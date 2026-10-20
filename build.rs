@@ -42,10 +42,8 @@ fn main() {
     let mut status = vec!["status", "--porcelain", "--untracked-files=all", "--"];
     status.extend(SOURCES);
     let dirty = git(&status).map(|s| (!s.is_empty()).to_string()).unwrap_or_else(|| "unknown".into());
-    let compiler = Command::new(std::env::var_os("RUSTC").expect("Cargo supplies RUSTC"))
-        .arg("--version")
-        .output()
-        .ok()
+    let compiler = std::env::var_os("RUSTC")
+        .and_then(|rustc| Command::new(rustc).arg("--version").output().ok())
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
         .unwrap_or_else(|| "unknown".into());
@@ -53,6 +51,6 @@ fn main() {
     println!("cargo:rustc-env=MJERS_DIRTY={dirty}");
     println!("cargo:rustc-env=MJERS_COMPILER={compiler}");
     for variable in ["TARGET", "PROFILE", "OPT_LEVEL"] {
-        println!("cargo:rustc-env=MJERS_{variable}={}", std::env::var(variable).expect("Cargo supplies build settings"));
+        println!("cargo:rustc-env=MJERS_{variable}={}", std::env::var(variable).unwrap_or_else(|_| "unknown".into()));
     }
 }

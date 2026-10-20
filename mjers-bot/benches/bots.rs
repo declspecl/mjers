@@ -1,5 +1,7 @@
 //! Bot decision latency and whole hands played by bots.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable)]
+
 use std::hint::black_box;
 use std::sync::Arc;
 

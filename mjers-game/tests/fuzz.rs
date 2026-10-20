@@ -1,5 +1,7 @@
 //! Random play across many seeds, checking invariants after every step.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable)]
+
 use std::sync::Arc;
 
 use mjers_game::action::{

@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{
+    Context,
+    bail,
+};
 use mjers_game::trace::Trace;
 use mjers_rules::ruleset::Ruleset;
 use mjers_rules::seat::Seat;
@@ -42,7 +45,10 @@ pub fn replay(args: ReplayArgs) -> anyhow::Result<()> {
     let game = trace.replay()?;
     say!("replayed {} steps; dealer {}, rules {}", trace.steps.len(), game.dealer(), trace.rules.name)?;
     print_events(&game, 0, None)?;
-    let totals = game.settlement().expect("a recorded hand is over").total();
+    let Some(settlement) = game.settlement() else {
+        bail!("the trace ends before the hand is over");
+    };
+    let totals = settlement.total();
     for seat in Seat::ALL {
         say!("{seat}: {:+}", totals[seat.index()])?;
     }

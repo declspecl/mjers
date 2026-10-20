@@ -65,7 +65,7 @@ pub fn wait_shapes(
         if !needed.tiles().all(|t| rest.remove(t)) || !is_complete(&rest, melds + 1) {
             continue;
         }
-        let low = lowest.rank().expect("suited");
+        let Some(low) = lowest.rank() else { continue };
         let position = index - lowest.index();
         shapes.push(match position {
             1 => WaitShape::Kanchan,

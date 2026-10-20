@@ -10,7 +10,7 @@ fn hand(notation: &str) -> Hand {
 }
 
 fn m(rank: u8) -> Tile {
-    Tile::suited(Suit::Wan, rank)
+    Tile::suited(Suit::Wan, rank).unwrap()
 }
 
 #[test]

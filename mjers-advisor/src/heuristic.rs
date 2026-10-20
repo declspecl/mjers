@@ -221,25 +221,25 @@ mod tests {
     }
 
     /// Plays efficiency bots until some seat may declare a self-drawn win.
-    fn game_with_self_draw_offer() -> (Game, Seat) {
+    fn game_with_self_draw_offer() -> Option<(Game, Seat)> {
         let rules = Arc::new(Ruleset::family());
-        for seed in 0.. {
+        for seed in 0..1_000 {
             let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
             let mut bot = mjers_bot::heuristic::HeuristicBot::efficiency();
             while let Some(seat) = game.to_act().first() {
                 if game.legal_actions(seat).contains(&Action::SelfDrawWin) {
-                    return (game, seat);
+                    return Some((game, seat));
                 }
                 let action = mjers_bot::policy::decide(&game, seat, &mut bot);
                 game.apply(seat, action).unwrap();
             }
         }
-        unreachable!()
+        None
     }
 
     #[test]
     fn wins_rank_first_and_report_their_value() {
-        let (game, seat) = game_with_self_draw_offer();
+        let (game, seat) = game_with_self_draw_offer().expect("some hand offers a self-drawn win");
         let ranked = rank(&game.observe(seat));
         assert_eq!(ranked[0].action, Action::SelfDrawWin);
         let bonus = game.hand(seat).bonus().len() as u32;

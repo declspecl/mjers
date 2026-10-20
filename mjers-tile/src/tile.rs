@@ -56,13 +56,12 @@ impl Tile {
         if index < KINDS { Some(Tile(index as u8)) } else { None }
     }
 
-    /// Panics if `rank` is outside 1..=9.
+    /// The suited tile of `rank` (1-9), or `None` for any other rank.
     pub const fn suited(
         suit: Suit,
         rank: u8,
-    ) -> Tile {
-        assert!(rank >= 1 && rank <= 9);
-        Tile(suit as u8 * 9 + rank - 1)
+    ) -> Option<Tile> {
+        if rank >= 1 && rank <= 9 { Some(Tile(suit as u8 * 9 + rank - 1)) } else { None }
     }
 
     pub const fn honor(honor: Honor) -> Tile {
@@ -154,7 +153,7 @@ pub(crate) fn tile_from_parts(
         'z' if (1..=7).contains(&digit) => return Some(Tile::honor(Honor::ALL[digit as usize - 1])),
         _ => return None,
     };
-    (1..=9).contains(&digit).then(|| Tile::suited(suit, digit))
+    Tile::suited(suit, digit)
 }
 
 impl FromStr for Tile {

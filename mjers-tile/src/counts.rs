@@ -44,8 +44,7 @@ impl TileCounts {
         &mut self,
         tile: Tile,
     ) {
-        debug_assert!(self.0[tile.index()] < COPIES, "fifth copy of {tile}");
-        self.0[tile.index()] += 1;
+        self.0[tile.index()] = self.0[tile.index()].saturating_add(1);
     }
 
     /// Removes one copy, returning false if none was present.
@@ -108,7 +107,7 @@ impl fmt::Display for TileCounts {
         &self,
         f: &mut fmt::Formatter<'_>,
     ) -> fmt::Result {
-        let groups = Suit::ALL.map(|s| (s.letter(), Tile::suited(s, 1).index()));
+        let groups = Suit::ALL.map(|s| (s.letter(), s as usize * 9));
         let honors = ('z', Tile::honor(Honor::East).index());
         for (letter, start) in groups.into_iter().chain([honors]) {
             let len = if letter == 'z' { Honor::ALL.len() } else { 9 };

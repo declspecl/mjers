@@ -46,9 +46,9 @@ impl Meld {
     pub fn tiles(self) -> TileCounts {
         match self {
             Meld::Chow(t) => {
-                let second = t.chow_successor().expect("chow is validated on construction");
-                let third = second.chow_successor().expect("chow is validated on construction");
-                [t, second, third].into_iter().collect()
+                let second = t.chow_successor();
+                let third = second.and_then(Tile::chow_successor);
+                [Some(t), second, third].into_iter().flatten().collect()
             },
             Meld::Pong(t) => std::iter::repeat_n(t, 3).collect(),
             Meld::Kong(t, _) => std::iter::repeat_n(t, 4).collect(),
@@ -67,14 +67,14 @@ mod tests {
 
     #[test]
     fn chow_requires_three_in_suit() {
-        assert!(Meld::chow(Tile::suited(Suit::Tiao, 7)).is_some());
-        assert!(Meld::chow(Tile::suited(Suit::Tiao, 8)).is_none());
+        assert!(Meld::chow(Tile::suited(Suit::Tiao, 7).unwrap()).is_some());
+        assert!(Meld::chow(Tile::suited(Suit::Tiao, 8).unwrap()).is_none());
         assert!(Meld::chow(Tile::honor(Honor::East)).is_none());
     }
 
     #[test]
     fn tiles_lists_physical_tiles() {
-        let chow = Meld::chow(Tile::suited(Suit::Wan, 3)).unwrap();
+        let chow = Meld::chow(Tile::suited(Suit::Wan, 3).unwrap()).unwrap();
         assert_eq!(chow.tiles().to_string(), "345m");
         assert_eq!(Meld::Kong(Tile::honor(Honor::Red), KongKind::Concealed).tiles().to_string(), "7777z");
     }

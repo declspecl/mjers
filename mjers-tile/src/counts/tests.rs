@@ -5,14 +5,14 @@ use crate::tile::Suit;
 fn parses_grouped_notation() {
     let counts: TileCounts = "123m55p7z".parse().unwrap();
     assert_eq!(counts.len(), 6);
-    assert_eq!(counts.get(Tile::suited(Suit::Wan, 1)), 1);
-    assert_eq!(counts.get(Tile::suited(Suit::Tong, 5)), 2);
+    assert_eq!(counts.get(Tile::suited(Suit::Wan, 1).unwrap()), 1);
+    assert_eq!(counts.get(Tile::suited(Suit::Tong, 5).unwrap()), 2);
     assert_eq!(counts.get(Tile::honor(Honor::Red)), 1);
 }
 
 #[test]
 fn parse_rejects_more_than_four_copies() {
-    assert_eq!("11111m".parse::<TileCounts>(), Err(ParseError::TooManyCopies(Tile::suited(Suit::Wan, 1))));
+    assert_eq!("11111m".parse::<TileCounts>(), Err(ParseError::TooManyCopies(Tile::suited(Suit::Wan, 1).unwrap())));
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn display_round_trips_and_groups_by_suit() {
 #[test]
 fn add_and_remove_track_length() {
     let mut counts = TileCounts::new();
-    let tile = Tile::suited(Suit::Tiao, 3);
+    let tile = Tile::suited(Suit::Tiao, 3).unwrap();
     counts.add(tile);
     counts.add(tile);
     assert_eq!(counts.len(), 2);

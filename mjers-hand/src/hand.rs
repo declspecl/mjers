@@ -251,8 +251,9 @@ impl Hand {
         &mut self,
         meld: Meld,
     ) -> Meld {
-        let slot = self.melds.iter_mut().find(|m| m.is_none()).expect("slot checked by ensure_meld_slot");
-        *slot = Some(meld);
+        if let Some(slot) = self.melds.iter_mut().find(|m| m.is_none()) {
+            *slot = Some(meld);
+        }
         meld
     }
 }

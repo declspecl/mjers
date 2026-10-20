@@ -1,5 +1,7 @@
 //! Advisor latency: the instant ranking and Monte Carlo playouts.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable)]
+
 use std::hint::black_box;
 use std::sync::Arc;
 

@@ -13,7 +13,7 @@ fn indices_cover_all_34_kinds_in_order() {
 fn suited_tiles_round_trip_suit_and_rank() {
     for suit in Suit::ALL {
         for rank in 1..=9 {
-            let tile = Tile::suited(suit, rank);
+            let tile = Tile::suited(suit, rank).unwrap();
             assert_eq!(tile.suit(), Some(suit));
             assert_eq!(tile.rank(), Some(rank));
             assert_eq!(tile.honor_kind(), None);
@@ -34,8 +34,8 @@ fn honor_tiles_have_no_suit() {
 
 #[test]
 fn chow_successor_stops_at_suit_boundary() {
-    assert_eq!(Tile::suited(Suit::Wan, 8).chow_successor(), Some(Tile::suited(Suit::Wan, 9)));
-    assert_eq!(Tile::suited(Suit::Wan, 9).chow_successor(), None);
+    assert_eq!(Tile::suited(Suit::Wan, 8).unwrap().chow_successor(), Some(Tile::suited(Suit::Wan, 9).unwrap()));
+    assert_eq!(Tile::suited(Suit::Wan, 9).unwrap().chow_successor(), None);
     assert_eq!(Tile::honor(Honor::East).chow_successor(), None);
 }
 
@@ -45,7 +45,7 @@ fn display_and_parse_round_trip() {
         let text = tile.to_string();
         assert_eq!(text.parse::<Tile>(), Ok(tile), "{text}");
     }
-    assert_eq!(Tile::suited(Suit::Tong, 5).to_string(), "5p");
+    assert_eq!(Tile::suited(Suit::Tong, 5).unwrap().to_string(), "5p");
     assert_eq!(Tile::honor(Honor::Red).to_string(), "7z");
 }
 

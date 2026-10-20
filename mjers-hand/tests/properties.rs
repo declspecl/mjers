@@ -1,5 +1,7 @@
 //! Cross-checks the fast hand algorithms against slow, obviously-correct references.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unreachable)]
+
 use std::collections::HashSet;
 
 use mjers_hand::shanten::shanten;

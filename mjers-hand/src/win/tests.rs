@@ -63,9 +63,9 @@ fn no_wait_on_a_fifth_copy() {
 #[test]
 fn hand_level_queries_include_melds() {
     let mut hand = Hand::new("11123m55z".parse().unwrap());
-    hand.claim_pong(Tile::suited(Suit::Wan, 1)).unwrap();
-    hand.discard(Tile::suited(Suit::Wan, 3)).unwrap();
-    assert_eq!(hand.melds().collect::<Vec<_>>(), [Meld::Pong(Tile::suited(Suit::Wan, 1))]);
+    hand.claim_pong(Tile::suited(Suit::Wan, 1).unwrap()).unwrap();
+    hand.discard(Tile::suited(Suit::Wan, 3).unwrap()).unwrap();
+    assert_eq!(hand.melds().collect::<Vec<_>>(), [Meld::Pong(Tile::suited(Suit::Wan, 1).unwrap())]);
     // 1m 2m 5z 5z beside the pong: not yet a 13-tile-equivalent hand.
     assert!(hand.waits().is_empty());
     let ready = Hand::new("123m456p789s1112z".parse().unwrap());

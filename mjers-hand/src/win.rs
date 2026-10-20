@@ -71,8 +71,7 @@ pub fn decompose(
 /// The pong-first greedy split of `counts` into sets, if one exists.
 fn collect_sets(counts: &mut [u8; KINDS]) -> Option<Vec<Meld>> {
     let mut sets = Vec::new();
-    for i in 0..KINDS {
-        let tile = Tile::from_index(i).expect("in range");
+    for (i, tile) in Tile::all().enumerate() {
         if counts[i] >= 3 {
             counts[i] -= 3;
             sets.push(Meld::Pong(tile));
