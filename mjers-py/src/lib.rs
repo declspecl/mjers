@@ -9,6 +9,7 @@ use mjers_core::bot::encoding::{
     EncodedObservation,
 };
 use mjers_core::bot::neural::{
+    NeuralNetwork,
     ResidualNet,
     Weights,
 };
@@ -348,6 +349,19 @@ impl Arena {
             self.advance(slot)?;
         }
         Ok(())
+    }
+
+    /// From now on, new hands' field seats play `net` (for example a frozen copy
+    /// of the student). Hands already dealt keep their players.
+    fn set_field_network(
+        &mut self,
+        name: &str,
+        net: &NeuralNet,
+    ) {
+        self.field = BotSpec::Neural {
+            name: name.into(),
+            network: NeuralNetwork::new(name, (*net.net).clone()),
+        };
     }
 
     /// Hands completed since the last call: (slot, seed, seat, student units).

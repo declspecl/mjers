@@ -10,7 +10,7 @@ from mjers.model import PolicyMetadata, ResidualPolicyNet, TrainedPolicy
 from mjers.reinforce import IterationReport, ReinforcementConfig, advantages, reinforce
 
 
-def config(start_seed: int) -> ReinforcementConfig:
+def config(start_seed: int, snapshot_every: int = 0) -> ReinforcementConfig:
     return ReinforcementConfig(
         iterations=2,
         hands_per_iteration=6,
@@ -26,6 +26,7 @@ def config(start_seed: int) -> ReinforcementConfig:
         start_seed=start_seed,
         device="cpu",
         threads=1,
+        snapshot_every=snapshot_every,
     )
 
 
@@ -66,6 +67,13 @@ class ReinforcementTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "overlap"):
             reinforce(policy, env.teacher_json, "family", config(505), record)
         self.assertEqual(compare(policy, env, range(600, 602), "all").seeds, (600, 601))
+
+    def test_self_play_records_its_snapshot_field(self) -> None:
+        reports: list[IterationReport] = []
+        policy, history = reinforce(self.policy(), "{}", "family", config(700, snapshot_every=1), lambda report, _: reports.append(report))
+        self.assertEqual(len(history), 2)
+        self.assertTrue(all(report.decisions > 0 for report in history))
+        self.assertIn('"kind":"snapshot"', policy.metadata.reinforcement[-1].field_json)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from torch.optim import Adam
 from mjers._native import Arena, Env
 from mjers.collect import read_spec
 from mjers.evaluate import range_overlaps
-from mjers.model import VALUE_SCALE, DeviceName, Reinforcement, ResidualPolicyNet, TrainedPolicy, load_policy, save_policy
+from mjers.model import VALUE_SCALE, DeviceName, Reinforcement, ResidualPolicyNet, TrainedPolicy, load_policy, native_network, save_policy
 
 
 @dataclass(frozen=True)
@@ -45,6 +45,9 @@ class ReinforcementConfig:
     start_seed: int
     device: DeviceName
     threads: int
+    # 0 plays the fixed field; N > 0 replaces it with a frozen copy of the
+    # student (self-play), refreshed every N iterations.
+    snapshot_every: int
 
     def __post_init__(self) -> None:
         counts = (self.iterations, self.hands_per_iteration, self.environments, self.epochs, self.minibatch_size, self.threads)
@@ -56,6 +59,8 @@ class ReinforcementConfig:
             raise ValueError("clip must be in (0, 1) and GAE lambda in [0, 1]")
         if min(self.value_weight, self.entropy_weight) < 0:
             raise ValueError("loss weights must be nonnegative")
+        if self.snapshot_every < 0:
+            raise ValueError("snapshot interval must be nonnegative")
 
     def hands(self) -> int:
         return self.iterations * self.hands_per_iteration
@@ -270,6 +275,8 @@ def reinforce(
     network = policy.network
     if not isinstance(network, ResidualPolicyNet):
         raise ValueError("reinforcement needs a policy with a value head (suit-resnet-v2)")
+    if config.snapshot_every > 0:
+        field_json = msgspec.json.encode({"kind": "snapshot", "refresh_every": config.snapshot_every}).decode()
     stage = Reinforcement(field_json, config.start_seed, config.hands())
     seen = set(policy.metadata.training_seeds) | set(policy.metadata.validation_seeds)
     if seen.intersection(stage.seeds()) or any(range_overlaps(earlier.seeds(), stage.seeds()) for earlier in policy.metadata.reinforcement):
@@ -278,7 +285,8 @@ def reinforce(
     torch.manual_seed(config.seed)
     device = torch.device(config.device)
     network = network.to(device)
-    arena = Arena(field_json, rules=rules_json, slots=config.environments)
+    # The Arena needs a BotSpec even when snapshots replace the field.
+    arena = Arena("efficiency" if config.snapshot_every > 0 else field_json, rules=rules_json, slots=config.environments)
     if arena.rules_json != policy.metadata.dataset.rules_json:
         raise ValueError("reinforcement rules differ from the policy's training rules")
     seeds = iter(stage.seeds())
@@ -289,6 +297,8 @@ def reinforce(
     reports: list[IterationReport] = []
     for iteration in range(1, config.iterations + 1):
         began = time.perf_counter()
+        if config.snapshot_every > 0 and (iteration - 1) % config.snapshot_every == 0:
+            arena.set_field_network(f"snapshot-{iteration}", native_network(network))
         data, units = play(network, arena, config.environments, seeds, config.hands_per_iteration, rng, sampling, device, config.gae_lambda)
         statistics = update(network, optimizer, data, config, shuffling)
         spread = float(np.std(units, ddof=1)) / math.sqrt(len(units)) if len(units) > 1 else 0.0
@@ -335,6 +345,7 @@ class ReinforceArguments(argparse.Namespace):
     device: DeviceName
     threads: int
     checkpoint_every: int
+    snapshot_every: int
 
 
 def main() -> None:
@@ -358,6 +369,12 @@ def main() -> None:
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), required=True)
     parser.add_argument("--threads", type=int, required=True)
     parser.add_argument("--checkpoint-every", type=int, required=True, help="also save the output every this many iterations")
+    parser.add_argument(
+        "--snapshot-every",
+        type=int,
+        required=True,
+        help="0 plays --field; N > 0 plays a frozen copy of the student refreshed every N iterations",
+    )
     args = parser.parse_args(namespace=ReinforceArguments())
     if args.checkpoint_every <= 0:
         parser.error("--checkpoint-every must be positive")
@@ -376,6 +393,7 @@ def main() -> None:
         args.start_seed,
         args.device,
         args.threads,
+        args.snapshot_every,
     )
     initial = load_policy(args.checkpoint, torch.device(args.device))
     field_json = Env(teacher=read_spec(args.field), rules=read_spec(args.rules)).teacher_json
