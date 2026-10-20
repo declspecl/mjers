@@ -8,7 +8,7 @@ import torch
 
 from mjers._native import Env, NeuralNet
 from mjers.collect import collect, make_env
-from mjers.model import VALUE_SCALE, PolicyMetadata, ResidualPolicyNet, TrainedPolicy, native_network, save_policy
+from mjers.model import VALUE_SCALE, PolicyMetadata, ResidualPolicyNet, SuitPolicyNet, TrainedPolicy, native_network, save_policy
 
 
 class NativeNetworkTests(unittest.TestCase):
@@ -79,3 +79,16 @@ class NeuralTeacherTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "different rules"):
                 make_env(str(strategy), "discarder-pays")
         self.assertIn('"efficiency"', make_env("efficiency", "family").teacher_json)
+
+    def test_only_residual_checkpoints_can_teach(self) -> None:
+        dataset = collect(Env("efficiency", rules="family"), range(0, 1))
+        policy = TrainedPolicy(
+            SuitPolicyNet(8).eval(), PolicyMetadata("suit-cnn-relu-v1", 8, dataset.metadata, (0,), (1,)), torch.device("cpu")
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory) / "cnn.safetensors"
+            save_policy(checkpoint, policy)
+            strategy = Path(directory) / "strategy.json"
+            strategy.write_text(json.dumps({"kind": "neural", "name": "cnn", "network": str(checkpoint)}))
+            with self.assertRaisesRegex(ValueError, "suit-resnet-v2"):
+                make_env(str(strategy), "family")
