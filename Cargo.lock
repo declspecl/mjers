@@ -540,6 +540,7 @@ dependencies = [
  "mjers-core",
  "numpy",
  "pyo3",
+ "rayon",
  "serde_json",
 ]
 

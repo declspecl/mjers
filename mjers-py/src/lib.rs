@@ -37,6 +37,7 @@ use pyo3::exceptions::{
     PyValueError,
 };
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 /// Inputs for one seat's decision. Array writes never affect the game.
 #[pyclass(frozen, module = "mjers._native", get_all)]
@@ -354,12 +355,26 @@ impl Arena {
         if slots.len() != actions.len() {
             return Err(PyValueError::new_err("one action per slot"));
         }
+        let mut touched = vec![false; self.slots.len()];
         for (slot, index) in slots.into_iter().zip(actions) {
             let hand = self.slots.get_mut(slot).and_then(Option::as_mut).ok_or_else(|| PyValueError::new_err("slot has no hand"))?;
+            if std::mem::replace(&mut touched[slot], true) {
+                return Err(PyValueError::new_err("one action per slot"));
+            }
             let observation = hand.game.observe(hand.seat);
             let action = encoding::legal_action(&observation, index).ok_or_else(|| PyValueError::new_err("action index is not legal at this decision"))?;
             hand.game.apply(hand.seat, action).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-            self.advance(slot)?;
+        }
+        // Hands are independent, so field play (a network field is the slow part) runs in parallel.
+        let outcomes: Vec<(usize, Result<Option<i32>, String>)> = self
+            .slots
+            .par_iter_mut()
+            .enumerate()
+            .filter(|(slot, _)| touched[*slot])
+            .filter_map(|(slot, hand)| hand.as_mut().map(|hand| (slot, hand.advance())))
+            .collect();
+        for (slot, outcome) in outcomes {
+            self.finish(slot, outcome)?;
         }
         Ok(())
     }
@@ -383,34 +398,50 @@ impl Arena {
     }
 }
 
+impl Hand {
+    /// Plays the field and forced student actions until the student must
+    /// choose; the student's settlement once the hand is over.
+    fn advance(&mut self) -> Result<Option<i32>, String> {
+        while let Some(seat) = self.game.to_act().first() {
+            let observation = self.game.observe(seat);
+            let legal = observation.legal_actions();
+            let action = if seat == self.seat {
+                let win = [Action::Win, Action::SelfDrawWin].into_iter().find(|win| legal.contains(win));
+                match (win, legal.first()) {
+                    (Some(win), _) => win,
+                    (None, Some(&only)) if legal.len() == 1 => only,
+                    _ => return Ok(None),
+                }
+            } else {
+                self.policies[seat.index()].act(&observation, &legal)
+            };
+            self.game.apply(seat, action).map_err(|error| error.to_string())?;
+        }
+        let settlement = self.game.settlement().ok_or("hand ended without a settlement")?;
+        Ok(Some(settlement.total()[self.seat.index()]))
+    }
+}
+
 impl Arena {
     fn advance(
         &mut self,
         slot: usize,
     ) -> PyResult<()> {
         let Some(hand) = self.slots.get_mut(slot).and_then(Option::as_mut) else { return Ok(()) };
-        while let Some(seat) = hand.game.to_act().first() {
-            let observation = hand.game.observe(seat);
-            let legal = observation.legal_actions();
-            let action = if seat == hand.seat {
-                let win = [Action::Win, Action::SelfDrawWin].into_iter().find(|win| legal.contains(win));
-                match (win, legal.first()) {
-                    (Some(win), _) => win,
-                    (None, Some(&only)) if legal.len() == 1 => only,
-                    _ => return Ok(()),
-                }
-            } else {
-                hand.policies[seat.index()].act(&observation, &legal)
-            };
-            hand.game.apply(seat, action).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        let outcome = hand.advance();
+        self.finish(slot, outcome)
+    }
+
+    /// Records a finished hand and frees its slot.
+    fn finish(
+        &mut self,
+        slot: usize,
+        outcome: Result<Option<i32>, String>,
+    ) -> PyResult<()> {
+        let Some(units) = outcome.map_err(PyRuntimeError::new_err)? else { return Ok(()) };
+        if let Some(hand) = self.slots.get_mut(slot).and_then(Option::take) {
+            self.finished.push((slot, hand.seed, hand.seat.index(), units));
         }
-        let units = hand
-            .game
-            .settlement()
-            .map(|settlement| settlement.total()[hand.seat.index()])
-            .ok_or_else(|| PyRuntimeError::new_err("hand ended without a settlement"))?;
-        self.finished.push((slot, hand.seed, hand.seat.index(), units));
-        self.slots[slot] = None;
         Ok(())
     }
 }
