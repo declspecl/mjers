@@ -9,9 +9,13 @@ use mjers_core::advisor::{
     AdviceConfig,
     advise,
 };
+use mjers_core::bot::encoding;
 use mjers_core::bot::heuristic::HeuristicBot;
+use mjers_core::bot::neural::NeuralNetwork;
 use mjers_core::bot::policy::decide;
+use mjers_core::bot::spec::BotSpec;
 use mjers_core::game::Game;
+use mjers_core::game::observation::Observation;
 use mjers_core::game::trace::Trace;
 use mjers_core::game::wall::Wall;
 use mjers_core::rules::seat::Seat;
@@ -39,6 +43,9 @@ pub struct Args {
     samples: u32,
     #[arg(long, default_value_t = 6)]
     candidates: usize,
+    /// Also show a neural strategy's choices and predicted settlement (text output).
+    #[arg(long)]
+    network: Option<String>,
     #[arg(long)]
     json: bool,
 }
@@ -65,7 +72,14 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         return Ok(());
     }
     say!("{seat} holds {}; {} live draws left", obs.hand(), obs.live_wall())?;
-    print_advice(&advice, usize::MAX)
+    print_advice(&advice, usize::MAX)?;
+    if let Some(name) = &args.network {
+        let BotSpec::Neural { network, .. } = load::strategy(name)? else {
+            bail!("--network needs a neural strategy file");
+        };
+        print_network(&network, &obs)?;
+    }
+    Ok(())
 }
 
 fn position(args: &Args) -> anyhow::Result<Game> {
@@ -114,4 +128,14 @@ pub fn print_advice(
         say!("  {:<20} {}", a.action.to_string(), a.reasons.join("; "))?;
     }
     Ok(())
+}
+
+/// A network's three most likely legal actions and predicted settlement.
+pub fn print_network(
+    network: &NeuralNetwork,
+    observation: &Observation<'_>,
+) -> std::io::Result<()> {
+    let evaluation = network.net().evaluate(&encoding::encode(observation));
+    let top: Vec<String> = evaluation.choices(observation).iter().take(3).map(|(action, p)| format!("{action} {:.0}%", 100.0 * p)).collect();
+    say!("network: {} (expects {:+.1} units)", top.join(", "), evaluation.settlement)
 }

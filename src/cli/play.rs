@@ -12,8 +12,6 @@ use mjers_core::advisor::{
     AdviceConfig,
     advise,
 };
-use mjers_core::bot::encoding;
-use mjers_core::bot::neural::NeuralNetwork;
 use mjers_core::bot::policy::{
     Policy,
     decide,
@@ -21,13 +19,15 @@ use mjers_core::bot::policy::{
 use mjers_core::bot::spec::BotSpec;
 use mjers_core::game::Game;
 use mjers_core::game::action::Action;
-use mjers_core::game::observation::Observation;
 use mjers_core::game::rng::derive_seed;
 use mjers_core::game::trace::Event;
 use mjers_core::rules::seat::Seat;
 use mjers_core::rules::settlement::WinSource;
 
-use super::advise::print_advice;
+use super::advise::{
+    print_advice,
+    print_network,
+};
 use super::load;
 
 #[derive(clap::Args)]
@@ -102,15 +102,6 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         say!("result: {:?}", settlement.total())?;
     }
     Ok(())
-}
-
-fn print_network(
-    network: &NeuralNetwork,
-    observation: &Observation<'_>,
-) -> std::io::Result<()> {
-    let evaluation = network.net().evaluate(&encoding::encode(observation));
-    let top: Vec<String> = evaluation.choices(observation).iter().take(3).map(|(action, p)| format!("{action} {:.0}%", 100.0 * p)).collect();
-    say!("network: {} (expects {:+.1} units)", top.join(", "), evaluation.settlement)
 }
 
 fn clock_seed() -> u64 {
