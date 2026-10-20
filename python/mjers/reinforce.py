@@ -23,12 +23,10 @@ from torch.autograd import backward
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from mjers._native import Env, Observation
+from mjers._native import Arena, Env
 from mjers.collect import read_spec
 from mjers.evaluate import range_overlaps
 from mjers.model import VALUE_SCALE, DeviceName, Reinforcement, ResidualPolicyNet, TrainedPolicy, load_policy, save_policy
-
-WIN_ACTIONS = (107, 108)
 
 
 @dataclass(frozen=True)
@@ -109,46 +107,22 @@ class ReinforcementReport:
     iterations: tuple[IterationReport, ...]
 
 
-class Hand:
-    """One environment's current hand and the student's decisions in it."""
+class Trajectory:
+    """The student's real choices in one hand, in order."""
 
-    def __init__(self, env: Env, seed: int, seat: int) -> None:
-        self.env = env
-        self.seed = seed
-        self.seat = seat
-        self.observation: Observation | None = env.reset(seed, seed % 4)
-        self.observations: list[Observation] = []
+    def __init__(self) -> None:
+        self.tiles: list[NDArray[np.float32]] = []
+        self.context: list[NDArray[np.float32]] = []
+        self.masks: list[NDArray[np.bool_]] = []
         self.actions: list[int] = []
         self.log_probs: list[float] = []
         self.values: list[float] = []
-        self.units: int | None = None
 
-    def advance(self) -> None:
-        """Play the field and forced student actions until the student must choose."""
-        while self.observation is not None:
-            observation = self.observation
-            if observation.seat == self.seat:
-                legal = np.flatnonzero(observation.action_mask)
-                wins = [action for action in WIN_ACTIONS if observation.action_mask[action]]
-                if not wins and len(legal) > 1:
-                    return
-                self.step(wins[0] if wins else int(legal[0]))
-            else:
-                self.step(self.env.teacher_action())
 
-    def choose(self, action: int, log_prob: float, value: float) -> None:
-        assert self.observation is not None
-        self.observations.append(self.observation)
-        self.actions.append(action)
-        self.log_probs.append(log_prob)
-        self.values.append(value)
-        self.step(action)
-
-    def step(self, action: int) -> None:
-        transition = self.env.step(action)
-        self.observation = transition.observation
-        if transition.terminated:
-            self.units = transition.rewards[self.seat]
+@dataclass(frozen=True)
+class Played:
+    trajectory: Trajectory
+    units: int
 
 
 def advantages(values: NDArray[np.float32], reward: float, gae_lambda: float) -> NDArray[np.float32]:
@@ -165,7 +139,8 @@ def advantages(values: NDArray[np.float32], reward: float, gae_lambda: float) ->
 
 def play(
     network: ResidualPolicyNet,
-    envs: list[Env],
+    arena: Arena,
+    slots: int,
     seeds: Iterator[int],
     hands: int,
     rng: np.random.Generator,
@@ -173,59 +148,66 @@ def play(
     device: torch.device,
     gae_lambda: float,
 ) -> tuple[Experience, list[int]]:
+    """Play `hands` hands, `slots` at a time; the field and forced moves run in Rust."""
     network.eval()
     started = 0
-    finished: list[Hand] = []
+    active: dict[int, Trajectory] = {}
+    finished: list[Played] = []
 
-    def start(env: Env) -> Hand:
+    def start(slot: int) -> None:
         nonlocal started
         started += 1
-        hand = Hand(env, next(seeds), int(rng.integers(4)))
-        hand.advance()
-        return hand
+        active[slot] = Trajectory()
+        arena.start(slot, next(seeds), int(rng.integers(4)))
 
-    active = [start(env) for env in envs[:hands]]
-    while active:
-        waiting = [hand for hand in active if hand.observation is not None]
-        if waiting:
-            observations = [hand.observation for hand in waiting if hand.observation is not None]
-            tiles = torch.from_numpy(np.stack([o.tiles for o in observations])).to(device)
-            context = torch.from_numpy(np.stack([o.context for o in observations])).to(device)
-            mask = torch.from_numpy(np.stack([o.action_mask for o in observations])).to(device)
-            with torch.inference_mode():
-                logits, values = network.heads(tiles, context, mask)
-                log_probs = logits.log_softmax(dim=1)
-                actions = torch.multinomial(log_probs.exp().cpu(), 1, generator=generator).squeeze(1)
-                chosen = log_probs.cpu().gather(1, actions.unsqueeze(1)).squeeze(1)
-            for hand, action, log_prob, value in zip(waiting, actions.tolist(), chosen.tolist(), values.cpu().tolist(), strict=True):
-                hand.choose(action, log_prob, value)
-                hand.advance()
-        still: list[Hand] = []
-        for hand in active:
-            if hand.observation is None:
-                finished.append(hand)
+    def collect_finished() -> None:
+        # Starting a hand can finish it at once, so drain until nothing new ends.
+        while done := arena.take_finished():
+            for slot, _seed, _seat, units in done:
+                finished.append(Played(active.pop(slot), units))
                 if started < hands:
-                    still.append(start(hand.env))
-            else:
-                still.append(hand)
-        active = still
-    return experience(finished, device, gae_lambda), [hand.units if hand.units is not None else 0 for hand in finished]
+                    start(slot)
+
+    for slot in range(min(slots, hands)):
+        start(slot)
+    collect_finished()
+    while active:
+        waiting, tiles, context, mask = arena.pending()
+        with torch.inference_mode():
+            logits, values = network.heads(
+                torch.from_numpy(tiles).to(device), torch.from_numpy(context).to(device), torch.from_numpy(mask).to(device)
+            )
+            log_probs = logits.log_softmax(dim=1)
+            actions = torch.multinomial(log_probs.exp().cpu(), 1, generator=generator).squeeze(1)
+            chosen = log_probs.cpu().gather(1, actions.unsqueeze(1)).squeeze(1)
+        for row, (slot, action, log_prob, value) in enumerate(
+            zip(waiting, actions.tolist(), chosen.tolist(), values.cpu().tolist(), strict=True)
+        ):
+            trajectory = active[slot]
+            trajectory.tiles.append(tiles[row])
+            trajectory.context.append(context[row])
+            trajectory.masks.append(mask[row])
+            trajectory.actions.append(action)
+            trajectory.log_probs.append(log_prob)
+            trajectory.values.append(value)
+        arena.act(waiting, actions.tolist())
+        collect_finished()
+    return experience(finished, device, gae_lambda), [hand.units for hand in finished]
 
 
-def experience(hands: list[Hand], device: torch.device, gae_lambda: float) -> Experience:
-    rows = [hand for hand in hands if hand.observations]
-    advantage_rows = [advantages(np.asarray(hand.values, dtype=np.float32), (hand.units or 0) / VALUE_SCALE, gae_lambda) for hand in rows]
-    values = np.concatenate([np.asarray(hand.values, dtype=np.float32) for hand in rows])
-    advantage = np.concatenate(advantage_rows)
-    observations = [observation for hand in rows for observation in hand.observations]
+def experience(hands: list[Played], device: torch.device, gae_lambda: float) -> Experience:
+    rows = [hand for hand in hands if hand.trajectory.actions]
+    values = [np.asarray(hand.trajectory.values, dtype=np.float32) for hand in rows]
+    advantage = np.concatenate([advantages(v, hand.units / VALUE_SCALE, gae_lambda) for v, hand in zip(values, rows, strict=True)])
+    trajectories = [hand.trajectory for hand in rows]
     return Experience(
-        torch.from_numpy(np.stack([o.tiles for o in observations])).to(device),
-        torch.from_numpy(np.stack([o.context for o in observations])).to(device),
-        torch.from_numpy(np.stack([o.action_mask for o in observations])).to(device),
-        torch.tensor([action for hand in rows for action in hand.actions], dtype=torch.int64, device=device),
-        torch.tensor([p for hand in rows for p in hand.log_probs], dtype=torch.float32, device=device),
+        torch.from_numpy(np.stack([t for trajectory in trajectories for t in trajectory.tiles])).to(device),
+        torch.from_numpy(np.stack([c for trajectory in trajectories for c in trajectory.context])).to(device),
+        torch.from_numpy(np.stack([m for trajectory in trajectories for m in trajectory.masks])).to(device),
+        torch.tensor([a for trajectory in trajectories for a in trajectory.actions], dtype=torch.int64, device=device),
+        torch.tensor([p for trajectory in trajectories for p in trajectory.log_probs], dtype=torch.float32, device=device),
         torch.from_numpy(advantage).to(device),
-        torch.from_numpy(advantage + values).to(device),
+        torch.from_numpy(advantage + np.concatenate(values)).to(device),
     )
 
 
@@ -296,8 +278,8 @@ def reinforce(
     torch.manual_seed(config.seed)
     device = torch.device(config.device)
     network = network.to(device)
-    envs = [Env(teacher=field_json, rules=rules_json) for _ in range(config.environments)]
-    if envs[0].rules_json != policy.metadata.dataset.rules_json:
+    arena = Arena(field_json, rules=rules_json, slots=config.environments)
+    if arena.rules_json != policy.metadata.dataset.rules_json:
         raise ValueError("reinforcement rules differ from the policy's training rules")
     seeds = iter(stage.seeds())
     rng = np.random.default_rng(config.seed)
@@ -307,7 +289,7 @@ def reinforce(
     reports: list[IterationReport] = []
     for iteration in range(1, config.iterations + 1):
         began = time.perf_counter()
-        data, units = play(network, envs, seeds, config.hands_per_iteration, rng, sampling, device, config.gae_lambda)
+        data, units = play(network, arena, config.environments, seeds, config.hands_per_iteration, rng, sampling, device, config.gae_lambda)
         statistics = update(network, optimizer, data, config, shuffling)
         spread = float(np.std(units, ddof=1)) / math.sqrt(len(units)) if len(units) > 1 else 0.0
         report = IterationReport(

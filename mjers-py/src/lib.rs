@@ -15,14 +15,19 @@ use mjers_core::bot::neural::{
 use mjers_core::bot::policy::Policy;
 use mjers_core::bot::spec::BotSpec;
 use mjers_core::game::Game;
+use mjers_core::game::action::Action;
 use mjers_core::game::rng::derive_seed;
 use mjers_core::rules::Ruleset;
 use mjers_core::rules::seat::Seat;
-use numpy::ndarray::Array2;
+use numpy::ndarray::{
+    Array2,
+    Array3,
+};
 use numpy::{
     IntoPyArray,
     PyArray1,
     PyArray2,
+    PyArray3,
     PyReadonlyArrayDyn,
     PyUntypedArrayMethods,
 };
@@ -237,6 +242,152 @@ impl Env {
     }
 }
 
+/// One student seat per hand against a field playing in Rust. The field's
+/// decisions, available wins and single-action decisions are applied without
+/// returning to Python; only real student choices are reported, batched.
+#[pyclass(unsendable, module = "mjers._native")]
+struct Arena {
+    rules: Arc<Ruleset>,
+    field: BotSpec,
+    slots: Vec<Option<Hand>>,
+    finished: Vec<Finished>,
+}
+
+struct Hand {
+    game: Game,
+    seed: u64,
+    seat: Seat,
+    policies: [Box<dyn Policy>; 4],
+}
+
+/// A completed hand: its slot, hand seed, student seat and the student's settlement.
+type Finished = (usize, u64, usize, i32);
+
+/// Pending student decisions: slots, then their tiles, context and action masks.
+type Pending = (Vec<usize>, Py<PyArray3<f32>>, Py<PyArray2<f32>>, Py<PyArray2<bool>>);
+
+#[pymethods]
+impl Arena {
+    #[new]
+    #[pyo3(signature = (field, *, rules, slots))]
+    fn new(
+        field: &str,
+        rules: &str,
+        slots: usize,
+    ) -> PyResult<Self> {
+        let Env { game, teacher, .. } = Env::new(field, rules)?;
+        Ok(Self {
+            rules: Arc::new(game.rules().clone()),
+            field: teacher,
+            slots: (0..slots).map(|_| None).collect(),
+            finished: Vec::new(),
+        })
+    }
+
+    #[getter]
+    fn rules_json(&self) -> PyResult<String> {
+        serde_json::to_string(&*self.rules).map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    }
+
+    /// Deals hand `seed` (dealer `seed % 4`, as in `Env`) into an empty slot.
+    fn start(
+        &mut self,
+        slot: usize,
+        seed: u64,
+        seat: usize,
+    ) -> PyResult<()> {
+        let seat = Seat::new(seat).ok_or_else(|| PyValueError::new_err("seat must be in 0..4"))?;
+        let entry = self.slots.get_mut(slot).ok_or_else(|| PyValueError::new_err("no such slot"))?;
+        if entry.is_some() {
+            return Err(PyValueError::new_err("slot is still playing a hand"));
+        }
+        let dealer = Seat::ALL[(seed % 4) as usize];
+        let game = Game::new(self.rules.clone(), seed, dealer).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let policies = std::array::from_fn(|i| self.field.build(derive_seed(seed, i as u64)));
+        *entry = Some(Hand { game, seed, seat, policies });
+        self.advance(slot)
+    }
+
+    /// Every slot whose student must choose, in slot order.
+    fn pending(
+        &self,
+        py: Python<'_>,
+    ) -> Pending {
+        let waiting: Vec<(usize, EncodedObservation)> = self
+            .slots
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, hand)| hand.as_ref().map(|hand| (slot, encoding::encode(&hand.game.observe(hand.seat)))))
+            .collect();
+        let n = waiting.len();
+        let tiles = Array3::from_shape_fn((n, encoding::PLANES, mjers_core::tile::KINDS), |(row, plane, tile)| waiting[row].1.tiles[plane][tile]);
+        let context = Array2::from_shape_fn((n, encoding::CONTEXT), |(row, i)| waiting[row].1.context[i]);
+        let mask = Array2::from_shape_fn((n, encoding::ACTIONS), |(row, i)| waiting[row].1.action_mask[i]);
+        (
+            waiting.iter().map(|&(slot, _)| slot).collect(),
+            tiles.into_pyarray(py).unbind(),
+            context.into_pyarray(py).unbind(),
+            mask.into_pyarray(py).unbind(),
+        )
+    }
+
+    /// Applies one student action per listed slot, then plays on to its next choice.
+    fn act(
+        &mut self,
+        slots: Vec<usize>,
+        actions: Vec<usize>,
+    ) -> PyResult<()> {
+        if slots.len() != actions.len() {
+            return Err(PyValueError::new_err("one action per slot"));
+        }
+        for (slot, index) in slots.into_iter().zip(actions) {
+            let hand = self.slots.get_mut(slot).and_then(Option::as_mut).ok_or_else(|| PyValueError::new_err("slot has no hand"))?;
+            let observation = hand.game.observe(hand.seat);
+            let action = encoding::legal_action(&observation, index).ok_or_else(|| PyValueError::new_err("action index is not legal at this decision"))?;
+            hand.game.apply(hand.seat, action).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+            self.advance(slot)?;
+        }
+        Ok(())
+    }
+
+    /// Hands completed since the last call: (slot, seed, seat, student units).
+    fn take_finished(&mut self) -> Vec<Finished> {
+        std::mem::take(&mut self.finished)
+    }
+}
+
+impl Arena {
+    fn advance(
+        &mut self,
+        slot: usize,
+    ) -> PyResult<()> {
+        let Some(hand) = self.slots.get_mut(slot).and_then(Option::as_mut) else { return Ok(()) };
+        while let Some(seat) = hand.game.to_act().first() {
+            let observation = hand.game.observe(seat);
+            let legal = observation.legal_actions();
+            let action = if seat == hand.seat {
+                let win = [Action::Win, Action::SelfDrawWin].into_iter().find(|win| legal.contains(win));
+                match (win, legal.first()) {
+                    (Some(win), _) => win,
+                    (None, Some(&only)) if legal.len() == 1 => only,
+                    _ => return Ok(()),
+                }
+            } else {
+                hand.policies[seat.index()].act(&observation, &legal)
+            };
+            hand.game.apply(seat, action).map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        }
+        let units = hand
+            .game
+            .settlement()
+            .map(|settlement| settlement.total()[hand.seat.index()])
+            .ok_or_else(|| PyRuntimeError::new_err("hand ended without a settlement"))?;
+        self.finished.push((slot, hand.seed, hand.seat.index(), units));
+        self.slots[slot] = None;
+        Ok(())
+    }
+}
+
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Env>()?;
@@ -244,6 +395,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Transition>()?;
     module.add_class::<ActionAssessment>()?;
     module.add_class::<NeuralNet>()?;
+    module.add_class::<Arena>()?;
     module.add("ENCODING_VERSION", encoding::VERSION)?;
     module.add("ACTION_COUNT", encoding::ACTIONS)?;
     module.add("TILE_PLANES", encoding::PLANES)?;
