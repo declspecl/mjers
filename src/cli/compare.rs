@@ -50,6 +50,12 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     print_row(&c.a, &result.a_metrics)?;
     print_row(&c.b, &result.b_metrics)?;
     say!()?;
-    say!("difference {:+.3} ± {:.3} units per hand (z = {:.2})", c.mean_difference, c.stderr, result.z)?;
+    say!(
+        "difference {:+.3} ± {:.3} units per hand (z = {:.2}; error across {} walls)",
+        c.mean_difference,
+        c.stderr,
+        result.z,
+        c.walls
+    )?;
     Ok(())
 }
