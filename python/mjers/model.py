@@ -14,7 +14,7 @@ from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch import Tensor, from_numpy, nn
 
-from mjers._native import ACTION_COUNT, CONTEXT_SIZE, ENCODING_VERSION, TILE_PLANES, Observation
+from mjers._native import ACTION_COUNT, CONTEXT_SIZE, ENCODING_VERSION, TILE_PLANES, NeuralNet, Observation
 from mjers.data import DatasetMetadata
 
 type DeviceName = Literal["cpu", "mps", "cuda"]
@@ -165,6 +165,11 @@ class ResidualPolicyNet(nn.Module):
 
     def forward(self, tiles: Tensor, context: Tensor, action_mask: Tensor) -> Tensor:
         return self.heads(tiles, context, action_mask)[0]
+
+
+def native_network(network: ResidualPolicyNet) -> NeuralNet:
+    """The same network for Rust inference (`mjers_core::bot::neural`)."""
+    return NeuralNet({name: tensor.detach().cpu().float().contiguous().numpy() for name, tensor in network.state_dict().items()})
 
 
 type PolicyNetwork = PolicyNet | SuitPolicyNet | ResidualPolicyNet

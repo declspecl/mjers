@@ -4,6 +4,7 @@ pub(crate) mod defense;
 pub mod efficiency;
 pub mod encoding;
 pub mod heuristic;
+pub mod neural;
 pub mod params;
 pub mod policy;
 pub mod spec;

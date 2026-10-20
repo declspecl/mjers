@@ -1,11 +1,16 @@
 //! Thin Python boundary; rules and observation encoding live in mjers-core.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use mjers_core::advisor::heuristic;
 use mjers_core::bot::encoding::{
     self,
     EncodedObservation,
+};
+use mjers_core::bot::neural::{
+    ResidualNet,
+    Weights,
 };
 use mjers_core::bot::policy::Policy;
 use mjers_core::bot::spec::BotSpec;
@@ -18,6 +23,8 @@ use numpy::{
     IntoPyArray,
     PyArray1,
     PyArray2,
+    PyReadonlyArrayDyn,
+    PyUntypedArrayMethods,
 };
 use pyo3::exceptions::{
     PyRuntimeError,
@@ -70,6 +77,26 @@ struct ActionAssessment {
     danger: f64,
     immediate_units: u32,
     reasons: Vec<String>,
+}
+
+/// Rust inference for a `suit-resnet-v2` state dict of float32 arrays.
+#[pyclass(frozen, module = "mjers._native")]
+struct NeuralNet {
+    net: Arc<ResidualNet>,
+}
+
+#[pymethods]
+impl NeuralNet {
+    #[new]
+    fn new(tensors: HashMap<String, PyReadonlyArrayDyn<'_, f32>>) -> PyResult<Self> {
+        let mut weights = Weights::new();
+        for (name, array) in tensors {
+            let data = array.as_array().iter().copied().collect();
+            weights.insert(name, array.shape().to_vec(), data).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        }
+        let net = ResidualNet::new(&weights).map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(Self { net: Arc::new(net) })
+    }
 }
 
 /// A turn-based four-player environment, with no auto-reset.
@@ -180,6 +207,16 @@ impl Env {
         })
     }
 
+    /// Logits (illegal actions at -inf) and predicted settlement units for the current observation.
+    fn evaluate_network(
+        &self,
+        net: &NeuralNet,
+    ) -> PyResult<(Vec<f32>, f32)> {
+        let seat = self.current_seat()?;
+        let evaluation = net.net.evaluate(&encoding::encode(&self.game.observe(seat)));
+        Ok((evaluation.logits.to_vec(), evaluation.settlement))
+    }
+
     /// Labels the current observation without advancing the game. Stateful
     /// teachers (random) consume their own RNG on each call.
     fn teacher_action(&mut self) -> PyResult<usize> {
@@ -206,6 +243,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<Observation>()?;
     module.add_class::<Transition>()?;
     module.add_class::<ActionAssessment>()?;
+    module.add_class::<NeuralNet>()?;
     module.add("ENCODING_VERSION", encoding::VERSION)?;
     module.add("ACTION_COUNT", encoding::ACTIONS)?;
     module.add("TILE_PLANES", encoding::PLANES)?;
