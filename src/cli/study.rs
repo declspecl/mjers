@@ -34,6 +34,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let spec = load::strategy(&args.strategy)?;
     let table: Table = std::array::from_fn(|_| spec.clone());
     let seeds = Seeds { start: args.seed, count: args.hands };
+    load::check_unseen(&spec, &rules, seeds)?;
     let s = study(&rules, &table, seeds)?;
     if args.json {
         let report = Report::new("study", rules, seeds, vec![spec], s);

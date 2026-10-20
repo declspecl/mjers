@@ -52,6 +52,15 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         bail!("--start must be a heuristic strategy");
     };
     let field = load::strategy(&args.field)?;
+    // Validation plays the block after the training seeds.
+    load::check_unseen(
+        &field,
+        &rules,
+        Seeds {
+            start: args.seed,
+            count: args.hands.saturating_mul(2),
+        },
+    )?;
     let config = TuneConfig {
         start,
         field: field.clone(),
