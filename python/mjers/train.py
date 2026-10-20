@@ -2,9 +2,10 @@
 
 import argparse
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import msgspec
 import torch
@@ -13,8 +14,22 @@ from torch.autograd import backward
 from torch.nn import functional as F
 from torch.optim import Adam, Optimizer
 
-from mjers.data import DecisionDataset, load_dataset
-from mjers.model import Architecture, DeviceName, PolicyMetadata, PolicyNetwork, TrainedPolicy, build_network, hand_seeds, save_policy
+from mjers.augment import random_relabeling, relabel_actions, relabel_mask, relabel_tiles
+from mjers.data import DecisionDataset, concatenate, load_dataset
+from mjers.model import (
+    VALUE_SCALE,
+    Architecture,
+    DeviceName,
+    PolicyMetadata,
+    PolicyNetwork,
+    ResidualPolicyNet,
+    TrainedPolicy,
+    build_network,
+    hand_seeds,
+    save_policy,
+)
+
+type Augmentation = Literal["none", "symmetry"]
 
 
 @dataclass(frozen=True)
@@ -27,12 +42,18 @@ class TrainingConfig:
     seed: int
     device: DeviceName
     threads: int
+    augment: Augmentation
+    value_weight: float
 
     def __post_init__(self) -> None:
         if min(self.hidden_width, self.epochs, self.batch_size, self.threads) <= 0:
             raise ValueError("width, epochs, batch size, and thread count must be positive")
         if not math.isfinite(self.learning_rate) or self.learning_rate <= 0:
             raise ValueError("learning rate must be positive and finite")
+        if not math.isfinite(self.value_weight) or self.value_weight < 0:
+            raise ValueError("value weight must be nonnegative and finite")
+        if self.value_weight > 0 and self.architecture != "suit-resnet-v2":
+            raise ValueError("only suit-resnet-v2 has a value head")
 
 
 @dataclass(frozen=True)
@@ -41,6 +62,7 @@ class PolicyBatch:
     context: Tensor
     action_mask: Tensor
     actions: Tensor
+    returns: Tensor
 
     @classmethod
     def from_dataset(cls, dataset: DecisionDataset, device: torch.device) -> "PolicyBatch":
@@ -49,10 +71,24 @@ class PolicyBatch:
             from_numpy(dataset.context).to(device),
             from_numpy(dataset.action_mask).to(device),
             from_numpy(dataset.actions).to(device),
+            from_numpy(dataset.returns).to(device),
         )
 
     def select(self, indices: Tensor) -> "PolicyBatch":
-        return PolicyBatch(self.tiles[indices], self.context[indices], self.action_mask[indices], self.actions[indices])
+        return PolicyBatch(
+            self.tiles[indices], self.context[indices], self.action_mask[indices], self.actions[indices], self.returns[indices]
+        )
+
+    def relabeled(self, generator: torch.Generator) -> "PolicyBatch":
+        """The same decisions under random tile symmetries (see `mjers.augment`)."""
+        relabeling = random_relabeling(len(self.actions), generator, self.actions.device)
+        return PolicyBatch(
+            relabel_tiles(self.tiles, relabeling),
+            self.context,
+            relabel_mask(self.action_mask, relabeling),
+            relabel_actions(self.actions, relabeling),
+            self.returns,
+        )
 
 
 @dataclass(frozen=True)
@@ -63,6 +99,8 @@ class Metrics:
     choice_correct: int
     choices: int
     uniform_loss: float
+    # Mean squared error of scaled settlement predictions; None without a value head.
+    value_loss: float | None
 
 
 @dataclass(frozen=True)
@@ -92,13 +130,17 @@ def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int) -> Metri
     correct = 0
     choice_correct = 0
     choices = 0
+    value_loss = 0.0
+    has_value = isinstance(network, ResidualPolicyNet)
     n = len(data.actions)
     with torch.inference_mode():
         for start in range(0, n, batch_size):
             end = start + batch_size
             mask = data.action_mask[start:end]
             labels = data.actions[start:end]
-            logits = network.forward(data.tiles[start:end], data.context[start:end], mask)
+            logits, value = network.heads(data.tiles[start:end], data.context[start:end], mask)
+            if value is not None:
+                value_loss += float(F.mse_loss(value, data.returns[start:end] / VALUE_SCALE, reduction="sum").item())
             loss += float(F.cross_entropy(logits, labels, reduction="sum").item())
             matches = logits.argmax(dim=1) == labels
             choice = mask.sum(dim=1) > 1
@@ -106,7 +148,7 @@ def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int) -> Metri
             choice_correct += int((matches & choice).sum().item())
             choices += int(choice.sum().item())
             uniform_loss += float(mask.sum(dim=1).float().log().sum().item())
-    return Metrics(loss / n, correct, n, choice_correct, choices, uniform_loss / n)
+    return Metrics(loss / n, correct, n, choice_correct, choices, uniform_loss / n, value_loss / n if has_value else None)
 
 
 def train(
@@ -127,6 +169,8 @@ def train(
     validation_batch = PolicyBatch.from_dataset(validation, device)
     optimizer = Adam(network.parameters(), lr=config.learning_rate)
     generator = torch.Generator(device="cpu").manual_seed(config.seed)
+    # A separate stream keeps the shuffle order independent of augmentation.
+    symmetries = torch.Generator(device="cpu").manual_seed(config.seed + 1)
 
     initial = EpochMetrics(0, measure(network, training_batch, config.batch_size), measure(network, validation_batch, config.batch_size))
     history = [initial]
@@ -140,7 +184,9 @@ def train(
         for start in range(0, len(order), config.batch_size):
             indices = order[start : start + config.batch_size]
             batch = training_batch.select(indices)
-            learn_batch(network, optimizer, batch)
+            if config.augment == "symmetry":
+                batch = batch.relabeled(symmetries)
+            learn_batch(network, optimizer, batch, config.value_weight)
         metrics = EpochMetrics(
             epoch, measure(network, training_batch, config.batch_size), measure(network, validation_batch, config.batch_size)
         )
@@ -159,10 +205,12 @@ def train(
     return TrainingResult(TrainedPolicy(network, metadata, device), TrainingReport(config, tuple(history), best_epoch))
 
 
-def learn_batch(network: PolicyNetwork, optimizer: Optimizer, batch: PolicyBatch) -> None:
+def learn_batch(network: PolicyNetwork, optimizer: Optimizer, batch: PolicyBatch, value_weight: float) -> None:
     optimizer.zero_grad(set_to_none=True)
-    logits = network.forward(batch.tiles, batch.context, batch.action_mask)
+    logits, value = network.heads(batch.tiles, batch.context, batch.action_mask)
     loss = F.cross_entropy(logits, batch.actions)
+    if value is not None and value_weight > 0:
+        loss = loss + value_weight * F.smooth_l1_loss(value, batch.returns / VALUE_SCALE)
     if not torch.isfinite(loss):
         raise ValueError("training produced a non-finite loss")
     backward(loss)
@@ -170,7 +218,7 @@ def learn_batch(network: PolicyNetwork, optimizer: Optimizer, batch: PolicyBatch
 
 
 class TrainArguments(argparse.Namespace):
-    training: Path
+    training: list[Path]
     validation: Path
     output: Path
     architecture: Architecture
@@ -181,14 +229,20 @@ class TrainArguments(argparse.Namespace):
     seed: int
     device: DeviceName
     threads: int
+    augment: Augmentation
+    value_weight: float
+
+
+def load_datasets(paths: Sequence[Path]) -> DecisionDataset:
+    return concatenate([load_dataset(path) for path in paths])
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--training", type=Path, required=True)
+    parser.add_argument("--training", type=Path, nargs="+", required=True)
     parser.add_argument("--validation", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--architecture", choices=("mlp-relu-v1", "suit-cnn-relu-v1"), required=True)
+    parser.add_argument("--architecture", choices=("mlp-relu-v1", "suit-cnn-relu-v1", "suit-resnet-v2"), required=True)
     parser.add_argument("--hidden-width", type=int, required=True)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--batch-size", type=int, required=True)
@@ -196,11 +250,24 @@ def main() -> None:
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), required=True)
     parser.add_argument("--threads", type=int, required=True)
+    parser.add_argument(
+        "--augment", choices=("none", "symmetry"), required=True, help="symmetry: random suit, rank-direction and honor relabelings"
+    )
+    parser.add_argument("--value-weight", type=float, required=True, help="settlement prediction loss weight; suit-resnet-v2 only")
     args = parser.parse_args(namespace=TrainArguments())
     config = TrainingConfig(
-        args.architecture, args.hidden_width, args.epochs, args.batch_size, args.learning_rate, args.seed, args.device, args.threads
+        args.architecture,
+        args.hidden_width,
+        args.epochs,
+        args.batch_size,
+        args.learning_rate,
+        args.seed,
+        args.device,
+        args.threads,
+        args.augment,
+        args.value_weight,
     )
-    result = train(load_dataset(args.training), load_dataset(args.validation), config, log_epoch)
+    result = train(load_datasets(args.training), load_dataset(args.validation), config, log_epoch)
     save_policy(args.output, result.policy)
     args.output.with_suffix(".training.json").write_bytes(msgspec.json.encode(result.report))
     print(f"saved epoch {result.report.best_epoch} to {args.output}")

@@ -1,5 +1,6 @@
 """Typed decision shards; file decoding and validation stay at this boundary."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,6 +66,30 @@ def save_dataset(path: Path, dataset: DecisionDataset) -> None:
             seats=dataset.seats,
             seeds=dataset.seeds,
         )
+
+
+def concatenate(datasets: Sequence[DecisionDataset]) -> DecisionDataset:
+    """Join shards collected under one encoding, ruleset, and teacher."""
+    if not datasets:
+        raise ValueError("concatenation requires datasets")
+    first = datasets[0]
+    if any(dataset.metadata != first.metadata for dataset in datasets):
+        raise ValueError("concatenated datasets must share encoding, rules, and teacher")
+    seeds = [set(np.unique(dataset.seeds).tolist()) for dataset in datasets]
+    if sum(len(shard) for shard in seeds) != len(set().union(*seeds)):
+        raise ValueError("concatenated datasets repeat hand seeds")
+    if len(datasets) == 1:
+        return first
+    return DecisionDataset(
+        metadata=first.metadata,
+        tiles=np.concatenate([dataset.tiles for dataset in datasets]),
+        context=np.concatenate([dataset.context for dataset in datasets]),
+        action_mask=np.concatenate([dataset.action_mask for dataset in datasets]),
+        actions=np.concatenate([dataset.actions for dataset in datasets]),
+        returns=np.concatenate([dataset.returns for dataset in datasets]),
+        seats=np.concatenate([dataset.seats for dataset in datasets]),
+        seeds=np.concatenate([dataset.seeds for dataset in datasets]),
+    )
 
 
 def load_dataset(path: Path) -> DecisionDataset:

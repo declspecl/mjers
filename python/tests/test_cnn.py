@@ -43,13 +43,13 @@ class SuitNetworkTests(unittest.TestCase):
         context = torch.rand(4, CONTEXT_SIZE)
         mask = torch.zeros(4, ACTION_COUNT, dtype=torch.bool)
         mask[:, :2] = True
-        batch = PolicyBatch(tiles, context, mask, torch.tensor([0, 1, 0, 1]))
+        batch = PolicyBatch(tiles, context, mask, torch.tensor([0, 1, 0, 1]), torch.zeros(4))
         logits = network.forward(tiles, context, mask)
         self.assertEqual(tuple(logits.shape), (4, ACTION_COUNT))
         self.assertTrue(bool(torch.isfinite(logits[:, :2]).all()))
         self.assertTrue(bool(torch.isneginf(logits[:, 2:]).all()))
         before = network.suit_input.weight.detach().clone()
-        learn_batch(network, Adam(network.parameters(), lr=0.001), batch)
+        learn_batch(network, Adam(network.parameters(), lr=0.001), batch, 0.0)
         self.assertFalse(torch.equal(before, network.suit_input.weight))
         for name, parameter in network.named_parameters():
             with self.subTest(parameter=name):
@@ -65,7 +65,7 @@ class SuitNetworkTests(unittest.TestCase):
     def test_training_selects_and_restores_cnn_checkpoint(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 8))
         validation = collect(Env("efficiency", rules="family"), range(100, 104))
-        config = TrainingConfig("suit-cnn-relu-v1", 32, 4, 64, 0.003, 7, "cpu", 1)
+        config = TrainingConfig("suit-cnn-relu-v1", 32, 4, 64, 0.003, 7, "cpu", 1, "none", 0.0)
         epochs: list[EpochMetrics] = []
         result = train(training, validation, config, epochs.append)
         self.assertIsInstance(result.policy.network, SuitPolicyNet)

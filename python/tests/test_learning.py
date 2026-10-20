@@ -8,7 +8,7 @@ import torch
 
 from mjers._native import ACTION_COUNT, Env
 from mjers.collect import collect
-from mjers.data import load_dataset, save_dataset
+from mjers.data import concatenate, load_dataset, save_dataset
 from mjers.evaluate import compare
 from mjers.model import load_policy, save_policy
 from mjers.train import EpochMetrics, TrainingConfig, train
@@ -19,7 +19,16 @@ class LearningTests(unittest.TestCase):
         training = collect(Env("efficiency", rules="family"), range(0, 8))
         validation = collect(Env("efficiency", rules="family"), range(100, 104))
         config = TrainingConfig(
-            architecture="mlp-relu-v1", hidden_width=32, epochs=8, batch_size=64, learning_rate=0.01, seed=7, device="cpu", threads=1
+            architecture="mlp-relu-v1",
+            hidden_width=32,
+            epochs=8,
+            batch_size=64,
+            learning_rate=0.01,
+            seed=7,
+            device="cpu",
+            threads=1,
+            augment="symmetry",
+            value_weight=0.0,
         )
         epochs: list[EpochMetrics] = []
         result = train(training, validation, config, epochs.append)
@@ -61,7 +70,7 @@ class LearningTests(unittest.TestCase):
 
     def test_training_rejects_leaking_seeds_or_mixed_rules(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 2))
-        config = TrainingConfig("mlp-relu-v1", 32, 1, 32, 0.001, 0, "cpu", 1)
+        config = TrainingConfig("mlp-relu-v1", 32, 1, 32, 0.001, 0, "cpu", 1, "none", 0.0)
         epochs: list[EpochMetrics] = []
         with self.assertRaisesRegex(ValueError, "overlap"):
             train(training, training, config, epochs.append)
@@ -84,6 +93,17 @@ class LearningTests(unittest.TestCase):
             replace(dataset, tiles=dataset.tiles[:, :1])
         with self.assertRaisesRegex(ValueError, "encoding"):
             replace(dataset, metadata=replace(dataset.metadata, encoding_version=999))
+
+    def test_concatenation_joins_disjoint_shards_only(self) -> None:
+        first = collect(Env("efficiency", rules="family"), range(0, 2))
+        second = collect(Env("efficiency", rules="family"), range(2, 4))
+        joined = concatenate([first, second])
+        self.assertEqual(len(joined.actions), len(first.actions) + len(second.actions))
+        np.testing.assert_array_equal(joined.seeds[: len(first.seeds)], first.seeds)
+        with self.assertRaisesRegex(ValueError, "repeat"):
+            concatenate([first, first])
+        with self.assertRaisesRegex(ValueError, "rules"):
+            concatenate([first, collect(Env("efficiency", rules="discarder-pays"), range(4, 6))])
 
 
 if __name__ == "__main__":
