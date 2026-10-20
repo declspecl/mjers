@@ -8,6 +8,10 @@ use serde::{
 use crate::advisor::AdviceConfig;
 use crate::advisor::policy::AdvisorBot;
 use crate::bot::heuristic::HeuristicBot;
+use crate::bot::neural::{
+    NeuralBot,
+    NeuralNetwork,
+};
 use crate::bot::params::Params;
 use crate::bot::policy::{
     Policy,
@@ -29,6 +33,12 @@ pub enum BotSpec {
     Advisor {
         name: String,
         advice: Box<AdviceConfig>,
+    },
+    /// A trained `suit-resnet-v2` network playing its best legal action. Its
+    /// JSON names the checkpoint; only callers that read files can load it.
+    Neural {
+        name: String,
+        network: NeuralNetwork,
     },
 }
 
@@ -52,7 +62,7 @@ impl BotSpec {
 
     pub fn name(&self) -> &str {
         match self {
-            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } => name,
+            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } | BotSpec::Neural { name, .. } => name,
         }
     }
 
@@ -65,6 +75,7 @@ impl BotSpec {
             BotSpec::Random { .. } => Box::new(RandomBot::new(seed)),
             BotSpec::Heuristic { name, params } => Box::new(HeuristicBot::new(name.clone(), params.clone())),
             BotSpec::Advisor { name, advice } => Box::new(AdvisorBot::new(name.clone(), (**advice).clone(), seed)),
+            BotSpec::Neural { name, network } => Box::new(NeuralBot::new(name.clone(), network.net().clone())),
         }
     }
 }

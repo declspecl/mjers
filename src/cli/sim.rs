@@ -56,6 +56,9 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         bail!("--seats needs exactly four strategies");
     };
     let seeds = Seeds { start: args.seed, count: args.hands };
+    for spec in &specs {
+        load::check_unseen(spec, &rules, seeds)?;
+    }
 
     if let Some(path) = &args.features {
         let file = File::create(path).with_context(|| format!("creating {path}"))?;

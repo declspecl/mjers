@@ -12,6 +12,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
+use serde::{
+    Deserialize,
+    Deserializer,
+    Serialize,
+    Serializer,
+};
+
 use crate::bot::encoding::{
     self,
     ACTIONS,
@@ -363,6 +370,60 @@ impl ResidualNet {
             logits,
             settlement: value[0] * VALUE_SCALE,
         }
+    }
+}
+
+/// A loaded network and the checkpoint it came from. It serializes as the
+/// checkpoint path; deserializing would need the weights, so callers that read
+/// files construct it with [`NeuralNetwork::new`] instead.
+#[derive(Debug, Clone)]
+pub struct NeuralNetwork {
+    checkpoint: String,
+    net: Arc<ResidualNet>,
+}
+
+impl NeuralNetwork {
+    pub fn new(
+        checkpoint: impl Into<String>,
+        net: ResidualNet,
+    ) -> NeuralNetwork {
+        NeuralNetwork {
+            checkpoint: checkpoint.into(),
+            net: Arc::new(net),
+        }
+    }
+
+    pub fn checkpoint(&self) -> &str {
+        &self.checkpoint
+    }
+
+    pub fn net(&self) -> &Arc<ResidualNet> {
+        &self.net
+    }
+}
+
+/// Networks are identified by their checkpoint.
+impl PartialEq for NeuralNetwork {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.checkpoint == other.checkpoint
+    }
+}
+
+impl Serialize for NeuralNetwork {
+    fn serialize<S: Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.checkpoint)
+    }
+}
+
+impl<'de> Deserialize<'de> for NeuralNetwork {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(serde::de::Error::custom("neural strategies must be loaded together with their checkpoint weights"))
     }
 }
 

@@ -34,6 +34,9 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let rules = load::ruleset(&args.rules)?;
     let (a, b, field) = (load::strategy(&args.a)?, load::strategy(&args.b)?, load::strategy(&args.field)?);
     let seeds = Seeds { start: args.seed, count: args.hands };
+    for spec in [&a, &b, &field] {
+        load::check_unseen(spec, &rules, seeds)?;
+    }
     let result = ComparisonResult::from(compare(&rules, &a, &b, &field, seeds)?);
     if args.json {
         let report = Report::new("comparison", rules, seeds, vec![a, b, field], result);

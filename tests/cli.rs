@@ -172,3 +172,68 @@ fn study_prints_every_section() {
         assert!(out.contains(section), "{section}: {out}");
     }
 }
+
+/// A tiny `suit-resnet-v2` safetensors checkpoint trained (nominally) on seeds 0 and 1.
+fn write_checkpoint(path: &std::path::Path) {
+    let (width, planes, context) = (2usize, 50usize, 22usize);
+    let mut layers: Vec<(String, Vec<usize>)> = Vec::new();
+    let mut layer = |name: &str, weight: Vec<usize>| {
+        let outputs = weight[0];
+        layers.push((format!("{name}.weight"), weight));
+        layers.push((format!("{name}.bias"), vec![outputs]));
+    };
+    layer("stem", vec![width, planes + context, 1]);
+    layer("blocks.0.suit_first", vec![width, width, 1, 3]);
+    layer("blocks.0.suit_second", vec![width, width, 1, 3]);
+    layer("blocks.0.honor_first", vec![width, width, 1]);
+    layer("blocks.0.honor_second", vec![width, width, 1]);
+    layer("blocks.0.pooled", vec![width, 2 * width]);
+    layer("tile_actions", vec![3, width, 1]);
+    layer("summary", vec![width, 3 * width + context]);
+    layer("other_actions", vec![8, width]);
+    layer("value_layer", vec![1, width]);
+    let rules = serde_json::to_string(&mjers_core::rules::Ruleset::family()).unwrap();
+    let metadata = serde_json::json!({
+        "architecture": "suit-resnet-v2",
+        "hidden_width": width,
+        "dataset": {"encoding_version": 1, "rules_json": rules, "teacher_json": "{}"},
+        "training_seeds": [0],
+        "validation_seeds": [1],
+        "reinforcement": [],
+    });
+    let mut header = serde_json::Map::new();
+    header.insert("__metadata__".into(), serde_json::json!({"mjers": metadata.to_string()}));
+    let mut data = Vec::new();
+    for (i, (name, shape)) in layers.iter().enumerate() {
+        let begin = data.len();
+        for j in 0..shape.iter().product::<usize>() {
+            data.extend_from_slice(&(((i * 7 + j * 3) % 11) as f32 / 20.0 - 0.25).to_le_bytes());
+        }
+        header.insert(name.clone(), serde_json::json!({"dtype": "F32", "shape": shape, "data_offsets": [begin, data.len()]}));
+    }
+    let header = serde_json::to_vec(&header).unwrap();
+    let mut file = (header.len() as u64).to_le_bytes().to_vec();
+    file.extend(header);
+    file.extend(data);
+    std::fs::write(path, file).unwrap();
+}
+
+#[test]
+fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
+    let dir = std::env::temp_dir().join(format!("mj-neural-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let checkpoint = dir.join("policy.safetensors");
+    write_checkpoint(&checkpoint);
+    let strategy = dir.join("net.json");
+    std::fs::write(&strategy, serde_json::json!({"kind": "neural", "name": "net", "network": checkpoint}).to_string()).unwrap();
+    let path = strategy.to_str().unwrap();
+    let out = stdout(&mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "100"], ""));
+    assert!(out.contains("net vs efficiency"), "{out}");
+    let json = stdout(&mj(&["compare", path, "efficiency", "--hands", "2", "--seed", "100", "--json"], ""));
+    assert!(json.contains(checkpoint.to_str().unwrap()), "reports name the checkpoint: {json}");
+    let overlap = mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "0"], "");
+    assert!(!overlap.status.success() && String::from_utf8_lossy(&overlap.stderr).contains("overlap"));
+    let rules = mj(&["compare", path, "efficiency", "--hands", "4", "--seed", "100", "--rules", "discarder-pays"], "");
+    assert!(!rules.status.success() && String::from_utf8_lossy(&rules.stderr).contains("different rules"));
+    std::fs::remove_dir_all(dir).unwrap();
+}

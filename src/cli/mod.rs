@@ -17,6 +17,7 @@ macro_rules! say_inline {
 
 mod advise;
 mod analyze;
+mod checkpoint;
 mod compare;
 mod load;
 mod play;
