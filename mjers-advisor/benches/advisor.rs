@@ -19,14 +19,14 @@ use mjers_rules::seat::Seat;
 
 fn bench(c: &mut Criterion) {
     let rules = Arc::new(Ruleset::family());
-    let mut game = Game::new(rules, 5, Seat::ALL[0]);
+    let mut game = Game::new(rules, 5, Seat::ALL[0]).unwrap();
     let mut bot = HeuristicBot::efficiency();
     for _ in 0..12 {
-        let seat = game.to_act()[0];
+        let seat = game.to_act().first().unwrap();
         let action = decide(&game, seat, &mut bot);
         game.apply(seat, action).unwrap();
     }
-    let seat = game.to_act()[0];
+    let seat = game.to_act().first().unwrap();
     let obs = game.observe(seat);
     let candidates: Vec<_> = rank(&obs).into_iter().take(3).map(|a| a.action).collect();
     let rollout = BotSpec::preset("efficiency").unwrap();

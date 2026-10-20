@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use mjers_hand::hand::HandError;
+use mjers_rules::ruleset::RulesError;
 use mjers_rules::seat::Seat;
 use mjers_rules::settlement::HandResult;
 use mjers_tile::tile::Tile;
@@ -78,11 +80,103 @@ pub enum Phase {
     Ended(HandResult),
 }
 
+/// Most legal actions a decision can offer: a turn has at most 14 discards,
+/// a win, 3 concealed kongs, and 4 kong upgrades.
+pub const MAX_ACTIONS: usize = 24;
+
+/// The legal actions at one decision, stored inline.
+#[derive(Clone, Copy)]
+pub struct Actions {
+    items: [Action; MAX_ACTIONS],
+    len: u8,
+}
+
+impl Actions {
+    pub const fn new() -> Actions {
+        Actions {
+            items: [Action::Pass; MAX_ACTIONS],
+            len: 0,
+        }
+    }
+
+    /// Adds `action`; the bound above means a legal decision never fills the list.
+    pub fn push(
+        &mut self,
+        action: Action,
+    ) {
+        if let Some(slot) = self.items.get_mut(self.len as usize) {
+            *slot = action;
+            self.len += 1;
+        }
+    }
+}
+
+impl Default for Actions {
+    fn default() -> Self {
+        Actions::new()
+    }
+}
+
+impl std::ops::Deref for Actions {
+    type Target = [Action];
+
+    fn deref(&self) -> &[Action] {
+        &self.items[..self.len as usize]
+    }
+}
+
+impl Extend<Action> for Actions {
+    fn extend<I: IntoIterator<Item = Action>>(
+        &mut self,
+        actions: I,
+    ) {
+        for action in actions {
+            self.push(action);
+        }
+    }
+}
+
+impl fmt::Debug for Actions {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+    ) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl PartialEq for Actions {
+    fn eq(
+        &self,
+        other: &Actions,
+    ) -> bool {
+        **self == **other
+    }
+}
+
+impl<const N: usize> PartialEq<[Action; N]> for Actions {
+    fn eq(
+        &self,
+        other: &[Action; N],
+    ) -> bool {
+        **self == *other
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GameError {
     HandOver,
     NotAsked(Seat),
-    Illegal { seat: Seat, action: Action },
+    Illegal {
+        seat: Seat,
+        action: Action,
+    },
+    Rules(RulesError),
+    /// A position or wall that cannot be played from.
+    InvalidPosition(&'static str),
+    /// The engine's own bookkeeping disagreed with a hand; a bug, reported
+    /// rather than crashing.
+    Inconsistent(HandError),
 }
 
 impl fmt::Display for GameError {
@@ -94,7 +188,22 @@ impl fmt::Display for GameError {
             GameError::HandOver => write!(f, "the hand is over"),
             GameError::NotAsked(seat) => write!(f, "{seat} has no decision to make"),
             GameError::Illegal { seat, action } => write!(f, "{seat} cannot {action} now"),
+            GameError::Rules(error) => write!(f, "{error}"),
+            GameError::InvalidPosition(reason) => write!(f, "invalid position: {reason}"),
+            GameError::Inconsistent(error) => write!(f, "engine bookkeeping error: {error}"),
         }
+    }
+}
+
+impl From<RulesError> for GameError {
+    fn from(error: RulesError) -> Self {
+        GameError::Rules(error)
+    }
+}
+
+impl From<HandError> for GameError {
+    fn from(error: HandError) -> Self {
+        GameError::Inconsistent(error)
     }
 }
 

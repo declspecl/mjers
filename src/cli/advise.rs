@@ -47,9 +47,9 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let game = position(&args)?;
     let seat = match args.seat {
         Some(i) => Seat::new(i).context("seat must be 0-3")?,
-        None => *game.to_act().first().context("the hand is over at that step")?,
+        None => game.to_act().first().context("the hand is over at that step")?,
     };
-    if !game.to_act().contains(&seat) {
+    if !game.to_act().contains(seat) {
         bail!("{seat} has no decision at step {}", args.step);
     }
     let obs = game.observe(seat);
@@ -61,12 +61,11 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     };
     let advice = advise(&obs, &config);
     if args.json {
-        println!("{}", serde_json::to_string_pretty(&advice)?);
+        say!("{}", serde_json::to_string_pretty(&advice)?)?;
         return Ok(());
     }
-    println!("{seat} holds {}; {} live draws left", obs.hand(), obs.live_wall());
-    print_advice(&advice, usize::MAX);
-    Ok(())
+    say!("{seat} holds {}; {} live draws left", obs.hand(), obs.live_wall())?;
+    print_advice(&advice, usize::MAX)
 }
 
 fn position(args: &Args) -> anyhow::Result<Game> {
@@ -74,17 +73,17 @@ fn position(args: &Args) -> anyhow::Result<Game> {
         let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
         let trace: Trace = serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
         let wall: [_; mjers_game::wall::WALL_SIZE] = trace.wall.clone().try_into().ok().context("trace wall must hold 144 tiles")?;
-        let mut game = Game::from_wall(Arc::new(trace.rules.clone()), Wall::from_order(wall, trace.rules.reserved_tiles()), trace.dealer);
+        let mut game = Game::from_wall(Arc::new(trace.rules.clone()), Wall::from_order(wall, trace.rules.reserved_tiles()), trace.dealer)?;
         for step in trace.steps.iter().take(args.step) {
             game.apply(step.seat, step.action)?;
         }
         return Ok(game);
     }
     let rules = Arc::new(load::ruleset(&args.rules)?);
-    let mut game = Game::new(rules, args.seed, Seat::ALL[(args.seed % 4) as usize]);
+    let mut game = Game::new(rules, args.seed, Seat::ALL[(args.seed % 4) as usize])?;
     let mut bot = HeuristicBot::efficiency();
     for _ in 0..args.step {
-        let seat = *game.to_act().first().context("the hand ended before that step")?;
+        let seat = game.to_act().first().context("the hand ended before that step")?;
         let action = decide(&game, seat, &mut bot);
         game.apply(seat, action)?;
     }
@@ -95,23 +94,24 @@ fn position(args: &Args) -> anyhow::Result<Game> {
 pub fn print_advice(
     advice: &Advice,
     limit: usize,
-) {
+) -> anyhow::Result<()> {
     if !advice.estimates.is_empty() {
-        println!("{:<22} {:>15} {:>16} {:>6} {:>8}", "playouts", "ev ± se", "vs top-ranked", "win%", "dealin%");
+        say!("{:<22} {:>15} {:>16} {:>6} {:>8}", "playouts", "ev ± se", "vs top-ranked", "win%", "dealin%")?;
         for e in &advice.estimates {
-            println!(
+            say!(
                 "{:<22} {:>15} {:>16} {:>6.1} {:>8.1}",
                 e.action.to_string(),
                 format!("{:+.2} ± {:.2}", e.ev, e.ev_stderr),
                 format!("{:+.2} ± {:.2}", e.difference, e.difference_stderr),
                 100.0 * e.win_rate,
                 100.0 * e.deal_in_rate
-            );
+            )?;
         }
-        println!();
+        say!()?;
     }
-    println!("recommended: {}", advice.best());
+    say!("recommended: {}", advice.best())?;
     for a in advice.ranked.iter().take(limit) {
-        println!("  {:<20} {}", a.action.to_string(), a.reasons.join("; "));
+        say!("  {:<20} {}", a.action.to_string(), a.reasons.join("; "))?;
     }
+    Ok(())
 }

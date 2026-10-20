@@ -17,9 +17,9 @@ fn random_hand(
     rules: &Arc<Ruleset>,
     seed: u64,
 ) -> Game {
-    let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]);
+    let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
     let mut rng = Rng::seed(seed);
-    while let Some(&seat) = game.to_act().first() {
+    while let Some(seat) = game.to_act().first() {
         let legal = game.legal_actions(seat);
         let action = legal[rng.below(legal.len() as u64) as usize];
         let _ = game.apply(seat, action);
@@ -33,7 +33,7 @@ fn bench(c: &mut Criterion) {
     c.bench_function("deal", |b| {
         b.iter(|| {
             seed += 1;
-            black_box(Game::new(rules.clone(), seed, Seat::ALL[0]))
+            black_box(Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap())
         })
     });
     c.bench_function("random_hand", |b| {

@@ -157,9 +157,8 @@ impl Composition {
             match *event {
                 Event::Discard { tile, .. } => last_discard = Some(tile),
                 Event::Claim { seat, meld: Meld::Chow(low), .. } if seat == winner => {
-                    let claimed = last_discard.expect("claims follow discards");
-                    let rank = low.rank().expect("chows are suited");
-                    match claimed.index() - low.index() {
+                    let (Some(claimed), Some(rank)) = (last_discard, low.rank()) else { continue };
+                    match claimed.index().saturating_sub(low.index()) {
                         1 => self.claimed_gap += 1,
                         2 if rank == 1 => self.claimed_edge += 1,
                         0 if rank == 7 => self.claimed_edge += 1,

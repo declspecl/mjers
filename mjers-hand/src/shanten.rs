@@ -4,6 +4,10 @@
 //! `8 − 2·sets − partials − eye`, where partials (pairs, two-sided, edge, and
 //! gap shapes) are capped so sets plus partials never exceed four.
 //!
+//! Like the standard formula, this ignores the four-copy limit: a hand holding
+//! all four copies of a tile can count a wait on a fifth (2347777m reads as
+//! ready on 7m). `waits` and ukeire exclude such tiles, so decisions are unaffected.
+//!
 //! Suits and honors never share a set, so each of the four groups (three
 //! suits, then honors) is summarised on its own and the summaries combined.
 //! `Groups` keeps those summaries so callers that change one tile at a time

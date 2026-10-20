@@ -1,7 +1,7 @@
 //! Instant, explainable ranking of every legal action.
 
-use mjers_bot::defense;
-use mjers_bot::heuristic::{
+use mjers_bot::defense::Threats;
+use mjers_bot::efficiency::{
     after_claim,
     after_kong,
     best_discard,
@@ -13,7 +13,7 @@ use mjers_game::observation::{
 };
 use mjers_hand::hand::Hand;
 use mjers_hand::ukeire::Ukeire;
-use mjers_rules::seat::Seat;
+use mjers_tile::tile::Tile;
 use serde::{
     Deserialize,
     Serialize,
@@ -48,17 +48,20 @@ impl Assessment {
     }
 }
 
-/// Every legal action, best first.
+/// Every legal action, best first. Actions that cannot be evaluated (which
+/// would mean the observation and its legal actions disagree) are left out.
 pub fn rank(obs: &Observation<'_>) -> Vec<Assessment> {
-    let mut assessments: Vec<Assessment> = obs.legal_actions().into_iter().map(|a| assess(obs, a)).collect();
+    let threats = Threats::assess(obs);
+    let mut assessments: Vec<Assessment> = obs.legal_actions().iter().filter_map(|&a| assess(obs, &threats, a)).collect();
     assessments.sort_by_key(Assessment::sort_key);
     assessments
 }
 
 fn assess(
     obs: &Observation<'_>,
+    threats: &Threats,
     action: Action,
-) -> Assessment {
+) -> Option<Assessment> {
     let hand = obs.hand();
     let visible = obs.public_tiles();
     let payouts = obs.rules().payouts;
@@ -68,38 +71,36 @@ fn assess(
         Action::Win | Action::SelfDrawWin => {
             let units = win_units(obs, action);
             reasons.push(format!("wins now, collecting {units} units"));
-            return Assessment {
+            return Some(Assessment {
                 action,
                 shanten: -1,
                 live_improving: 0,
                 danger: 0.0,
                 immediate_units: units,
                 reasons,
-            };
+            });
         },
         Action::Discard(tile) => {
             let mut after = *hand;
-            after.discard(tile).expect("legal discards are held");
+            after.discard(tile).ok()?;
             (after, Some(tile), 0)
         },
         Action::ConcealedKong(_) | Action::UpgradeKong(_) => {
-            let after = after_kong(hand, action).expect("legal kong");
+            let after = after_kong(hand, action)?;
             let concealed = matches!(action, Action::ConcealedKong(_));
             let each = if concealed { payouts.concealed_kong } else { payouts.exposed_kong };
             reasons.push(format!("{} kong collects {} units now", if concealed { "concealed" } else { "exposed" }, each * others));
             (after, None, each * others)
         },
         Action::Kong => {
-            let tile = claimed_tile(obs);
-            let after = after_claim(hand, tile, action).expect("legal kong");
+            let after = after_claim(hand, claimed_tile(obs)?, action)?;
             reasons.push(format!("exposed kong collects {} units now", payouts.exposed_kong * others));
             (after, None, payouts.exposed_kong * others)
         },
         Action::Pong | Action::Chow(_) => {
-            let tile = claimed_tile(obs);
-            let mut after = after_claim(hand, tile, action).expect("legal claim");
-            let discard = best_discard(&after, visible);
-            after.discard(discard).expect("held");
+            let mut after = after_claim(hand, claimed_tile(obs)?, action)?;
+            let discard = best_discard(&after, visible)?;
+            after.discard(discard).ok()?;
             reasons.push(format!("then discard {discard}"));
             (after, Some(discard), 0)
         },
@@ -113,30 +114,29 @@ fn assess(
     reasons.insert(0, describe(&ukeire, hand, &after));
     let danger = match action {
         Action::Discard(tile) => {
-            let unseen = defense::unseen(obs);
-            let danger = defense::danger(obs, tile, &unseen);
-            reasons.push(danger_reason(obs, tile, danger));
+            let danger = threats.danger(tile);
+            reasons.push(danger_reason(obs, threats, tile, danger));
             danger
         },
         _ => 0.0,
     };
-    if matches!(action, Action::Pass) && obs.legal_actions().contains(&Action::Kong) {
+    if action == Action::Pass && obs.legal_actions().contains(&Action::Kong) {
         reasons.push(format!("forgoes {} units of kong payment", payouts.exposed_kong * others));
     }
-    Assessment {
+    Some(Assessment {
         action,
         shanten: ukeire.shanten,
         live_improving: ukeire.total(),
         danger,
         immediate_units,
         reasons,
-    }
+    })
 }
 
-fn claimed_tile(obs: &Observation<'_>) -> mjers_tile::tile::Tile {
+fn claimed_tile(obs: &Observation<'_>) -> Option<Tile> {
     match obs.decision() {
-        Decision::Claim { tile, .. } => tile,
-        _ => unreachable!("claims are only legal in a claim window"),
+        Decision::Claim { tile, .. } => Some(tile),
+        _ => None,
     }
 }
 
@@ -176,22 +176,23 @@ fn describe(
 
 fn danger_reason(
     obs: &Observation<'_>,
-    tile: mjers_tile::tile::Tile,
+    threats: &Threats,
+    tile: Tile,
     danger: f64,
 ) -> String {
-    let safe_against: Vec<String> = obs.seat().others().filter(|&o| defense::passed(obs, o).get(tile) > 0).map(|o: Seat| o.to_string()).collect();
-    let threats: Vec<String> = obs
-        .seat()
-        .others()
-        .filter(|&o| defense::readiness(obs, o) >= 0.5)
-        .map(|o| format!("{o} ({} melds)", obs.melds(o).count()))
+    let safe_against: Vec<String> = threats.opponents().iter().filter(|t| t.passed.contains(tile)).map(|t| t.seat.to_string()).collect();
+    let likely_ready: Vec<String> = threats
+        .opponents()
+        .iter()
+        .filter(|t| t.readiness >= 0.5)
+        .map(|t| format!("{} ({} melds)", t.seat, obs.melds(t.seat).count()))
         .collect();
     let mut reason = format!("danger {danger:.2}");
     if !safe_against.is_empty() {
         reason += &format!("; already passed by {}", safe_against.join(", "));
     }
-    if !threats.is_empty() {
-        reason += &format!("; likely ready: {}", threats.join(", "));
+    if !likely_ready.is_empty() {
+        reason += &format!("; likely ready: {}", likely_ready.join(", "));
     }
     reason
 }
@@ -202,6 +203,7 @@ mod tests {
 
     use mjers_game::game::Game;
     use mjers_rules::ruleset::Ruleset;
+    use mjers_rules::seat::Seat;
 
     use super::*;
 
@@ -209,7 +211,7 @@ mod tests {
     fn ranks_every_legal_action_with_reasons() {
         let rules = Arc::new(Ruleset::family());
         for seed in 0..30 {
-            let game = Game::new(rules.clone(), seed, Seat::ALL[0]);
+            let game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
             let obs = game.observe(Seat::ALL[0]);
             let ranked = rank(&obs);
             assert_eq!(ranked.len(), obs.legal_actions().len());
@@ -222,9 +224,9 @@ mod tests {
     fn game_with_self_draw_offer() -> (Game, Seat) {
         let rules = Arc::new(Ruleset::family());
         for seed in 0.. {
-            let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]);
+            let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
             let mut bot = mjers_bot::heuristic::HeuristicBot::efficiency();
-            while let Some(&seat) = game.to_act().first() {
+            while let Some(seat) = game.to_act().first() {
                 if game.legal_actions(seat).contains(&Action::SelfDrawWin) {
                     return (game, seat);
                 }

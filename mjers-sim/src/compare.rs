@@ -6,15 +6,16 @@ use std::sync::Arc;
 use mjers_bot::spec::BotSpec;
 use mjers_rules::ruleset::Ruleset;
 use mjers_rules::seat::Seat;
-use rayon::prelude::*;
 use serde::{
     Deserialize,
     Serialize,
 };
 
 use crate::runner::{
+    HandFailure,
     Seeds,
     Table,
+    par_try_fold,
     play_hand,
 };
 use crate::stats::Stats;
@@ -71,30 +72,33 @@ pub fn compare(
     b: &BotSpec,
     field: &BotSpec,
     seeds: Seeds,
-) -> Comparison {
+) -> Result<Comparison, HandFailure> {
     let rules = Arc::new(rules.clone());
     let with = |candidate: &BotSpec, seat: Seat| -> Table { std::array::from_fn(|i| if i == seat.index() { candidate.clone() } else { field.clone() }) };
-    let paired = (0..seeds.count * 4)
-        .into_par_iter()
-        .fold(Paired::default, |mut acc, i| {
+    let paired = par_try_fold(
+        seeds.count * 4,
+        |acc: &mut Paired, i| {
             let seed = seeds.start.wrapping_add(i / 4);
             let seat = Seat::ALL[(i % 4) as usize];
-            let game_a = play_hand(&rules, &with(a, seat), seed);
-            let game_b = play_hand(&rules, &with(b, seat), seed);
-            let diff = (game_a.settlement().expect("over").total()[seat.index()] - game_b.settlement().expect("over").total()[seat.index()]) as i64;
-            acc.n += 1;
-            acc.sum += diff;
-            acc.sum_squared += (diff * diff) as u64;
-            acc.a.record(&game_a, seat);
-            acc.b.record(&game_b, seat);
-            acc
-        })
-        .reduce(Paired::default, Paired::merge);
+            let game_a = play_hand(&rules, &with(a, seat), seed)?;
+            let game_b = play_hand(&rules, &with(b, seat), seed)?;
+            if let (Some(units_a), Some(units_b)) = (game_a.settlement(), game_b.settlement()) {
+                let diff = (units_a.total()[seat.index()] - units_b.total()[seat.index()]) as i64;
+                acc.n += 1;
+                acc.sum += diff;
+                acc.sum_squared += (diff * diff) as u64;
+                acc.a.record(&game_a, seat);
+                acc.b.record(&game_b, seat);
+            }
+            Ok(())
+        },
+        Paired::merge,
+    )?;
 
     let n = paired.n.max(1) as f64;
     let mean = paired.sum as f64 / n;
     let variance = (paired.sum_squared as f64 / n - mean * mean).max(0.0) * n / (n - 1.0).max(1.0);
-    Comparison {
+    Ok(Comparison {
         a: a.name().to_string(),
         b: b.name().to_string(),
         field: field.name().to_string(),
@@ -103,7 +107,7 @@ pub fn compare(
         stderr: (variance / n).sqrt(),
         a_stats: paired.a,
         b_stats: paired.b,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -116,7 +120,7 @@ mod tests {
 
     #[test]
     fn identical_candidates_tie_exactly() {
-        let c = compare(&Ruleset::family(), &preset("efficiency"), &preset("efficiency"), &preset("efficiency"), Seeds { start: 0, count: 50 });
+        let c = compare(&Ruleset::family(), &preset("efficiency"), &preset("efficiency"), &preset("efficiency"), Seeds { start: 0, count: 50 }).unwrap();
         assert_eq!(c.pairs, 200);
         assert_eq!((c.mean_difference, c.stderr), (0.0, 0.0));
         assert_eq!(c.a_stats, c.b_stats);
@@ -124,7 +128,7 @@ mod tests {
 
     #[test]
     fn detects_a_better_candidate() {
-        let c = compare(&Ruleset::family(), &preset("efficiency"), &preset("random"), &preset("efficiency"), Seeds { start: 0, count: 100 });
+        let c = compare(&Ruleset::family(), &preset("efficiency"), &preset("random"), &preset("efficiency"), Seeds { start: 0, count: 100 }).unwrap();
         assert!(c.z() > 5.0, "{c:?}");
     }
 }

@@ -1,5 +1,6 @@
 //! The advisor: instant ranking, refined by playouts when asked.
 
+use mjers_bot::params::Params;
 use mjers_bot::spec::BotSpec;
 use mjers_game::action::Action;
 use mjers_game::observation::Observation;
@@ -34,7 +35,10 @@ impl Default for AdviceConfig {
             samples: 200,
             candidates: 6,
             seed: 0,
-            rollout: BotSpec::preset("efficiency").expect("preset"),
+            rollout: BotSpec::Heuristic {
+                name: "efficiency".into(),
+                params: Params::efficiency(),
+            },
         }
     }
 }
@@ -94,7 +98,7 @@ mod tests {
 
     #[test]
     fn advice_covers_every_action_and_estimates_candidates() {
-        let game = Game::new(Arc::new(Ruleset::family()), 3, Seat::ALL[0]);
+        let game = Game::new(Arc::new(Ruleset::family()), 3, Seat::ALL[0]).unwrap();
         let obs = game.observe(Seat::ALL[0]);
         let config = AdviceConfig {
             samples: 30,
@@ -110,7 +114,7 @@ mod tests {
 
     #[test]
     fn zero_samples_uses_the_ranking() {
-        let game = Game::new(Arc::new(Ruleset::family()), 3, Seat::ALL[0]);
+        let game = Game::new(Arc::new(Ruleset::family()), 3, Seat::ALL[0]).unwrap();
         let advice = advise(
             &game.observe(Seat::ALL[0]),
             &AdviceConfig {

@@ -5,10 +5,8 @@ use serde::{
     Serialize,
 };
 
-use crate::heuristic::{
-    HeuristicBot,
-    Params,
-};
+use crate::heuristic::HeuristicBot;
+use crate::params::Params;
 use crate::policy::{
     Policy,
     RandomBot,
@@ -84,7 +82,7 @@ mod tests {
         assert_eq!(
             params,
             Params {
-                chow: crate::heuristic::ClaimRule::Never,
+                chow: crate::params::ClaimRule::Never,
                 ..Params::efficiency()
             }
         );

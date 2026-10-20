@@ -11,7 +11,7 @@ use mjers_tile::counts::TileCounts;
 use mjers_tile::tile::Tile;
 
 use crate::action::{
-    Action,
+    Actions,
     Offer,
     Phase,
 };
@@ -113,7 +113,7 @@ impl<'a> Observation<'a> {
     }
 
     pub fn decision(&self) -> Decision {
-        if !self.game.to_act().contains(&self.seat) {
+        if !self.game.to_act().contains(self.seat) {
             return Decision::None;
         }
         match *self.game.phase() {
@@ -126,7 +126,7 @@ impl<'a> Observation<'a> {
         }
     }
 
-    pub fn legal_actions(&self) -> Vec<Action> {
+    pub fn legal_actions(&self) -> Actions {
         self.game.legal_actions(self.seat)
     }
 }
@@ -134,6 +134,7 @@ impl<'a> Observation<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::action::Action;
     use crate::testing::*;
 
     const HANDS: [&str; 4] = ["123456789m1234z", "123456789p1119s", "1234567s99s5566z", "78s222333444z66z"];

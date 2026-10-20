@@ -1,6 +1,9 @@
 //! The interface every player implements, and a driver that plays a hand.
 
-use mjers_game::action::Action;
+use mjers_game::action::{
+    Action,
+    GameError,
+};
 use mjers_game::game::Game;
 use mjers_game::observation::Observation;
 use mjers_game::rng::Rng;
@@ -8,7 +11,8 @@ use mjers_rules::seat::Seat;
 
 /// Chooses an action from what one seat can see.
 ///
-/// `legal` is never empty, and the returned action must be one of its entries.
+/// The returned action should be one of `legal`; anything else is rejected
+/// by the game as illegal.
 pub trait Policy: Send {
     fn name(&self) -> &str;
 
@@ -40,21 +44,22 @@ impl Policy for RandomBot {
         _: &Observation<'_>,
         legal: &[Action],
     ) -> Action {
-        legal[self.rng.below(legal.len() as u64) as usize]
+        let pick = self.rng.below(legal.len() as u64) as usize;
+        legal.get(pick).copied().unwrap_or(Action::Pass)
     }
 }
 
 /// Plays `game` to the end, asking `policies[seat]` for every decision.
-///
-/// Panics if a policy returns an action that is not legal.
+/// Stops with the game's error if a policy chooses an illegal action.
 pub fn play_out(
     game: &mut Game,
     policies: &mut [Box<dyn Policy>; 4],
-) {
-    while let Some(&seat) = game.to_act().first() {
+) -> Result<(), GameError> {
+    while let Some(seat) = game.to_act().first() {
         let action = decide(game, seat, &mut *policies[seat.index()]);
-        game.apply(seat, action).unwrap_or_else(|e| panic!("{} chose an illegal action: {e}", policies[seat.index()].name()));
+        game.apply(seat, action)?;
     }
+    Ok(())
 }
 
 /// Asks one policy for its decision.
@@ -83,8 +88,8 @@ mod tests {
     fn random_bots_finish_hands() {
         let rules = Arc::new(Ruleset::family());
         for seed in 0..200 {
-            let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]);
-            play_out(&mut game, &mut random_table(seed));
+            let mut game = Game::new(rules.clone(), seed, Seat::ALL[0]).unwrap();
+            play_out(&mut game, &mut random_table(seed)).unwrap();
             assert!(game.is_over());
         }
     }
@@ -92,10 +97,10 @@ mod tests {
     #[test]
     fn same_seeds_same_hand() {
         let rules = Arc::new(Ruleset::family());
-        let mut a = Game::new(rules.clone(), 9, Seat::ALL[0]);
-        let mut b = Game::new(rules, 9, Seat::ALL[0]);
-        play_out(&mut a, &mut random_table(9));
-        play_out(&mut b, &mut random_table(9));
+        let mut a = Game::new(rules.clone(), 9, Seat::ALL[0]).unwrap();
+        let mut b = Game::new(rules, 9, Seat::ALL[0]).unwrap();
+        play_out(&mut a, &mut random_table(9)).unwrap();
+        play_out(&mut b, &mut random_table(9)).unwrap();
         assert_eq!(a.steps(), b.steps());
     }
 }

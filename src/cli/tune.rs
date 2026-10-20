@@ -62,7 +62,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         rounds: args.rounds,
         min_z: args.min_z,
     };
-    let result = tune(&rules, &config);
+    let result = tune(&rules, &config)?;
     let tuned = BotSpec::Heuristic {
         name: args.name.clone(),
         params: result.champion.clone(),
@@ -72,23 +72,23 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     }
     if args.json {
         let report = Report::new("tuning", provenance::current(), rules, config.training, vec![tuned, field], result);
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        say!("{}", serde_json::to_string_pretty(&report)?)?;
         return Ok(());
     }
     for trial in result.trials.iter().filter(|t| t.adopted) {
-        println!("round {}: adopted {:?} change, {:+.3} ± {:.3}", trial.round, trial.dimension, trial.mean_difference, trial.stderr);
+        say!("round {}: adopted {:?} change, {:+.3} ± {:.3}", trial.round, trial.dimension, trial.mean_difference, trial.stderr)?;
     }
-    println!("{} trials; champion: {}", result.trials.len(), serde_json::to_string(&result.champion)?);
-    println!();
-    println!(
+    say!("{} trials; champion: {}", result.trials.len(), serde_json::to_string(&result.champion)?)?;
+    say!()?;
+    say!(
         "held-out seeds {}..{}:",
         result.validation_seeds.start,
         result.validation_seeds.start.wrapping_add(result.validation_seeds.count)
-    );
-    print_header("candidate");
-    print_row("champion", &result.validation.a_metrics);
-    print_row("start", &result.validation.b_metrics);
+    )?;
+    print_header("candidate")?;
+    print_row("champion", &result.validation.a_metrics)?;
+    print_row("start", &result.validation.b_metrics)?;
     let c = &result.validation.comparison;
-    println!("difference {:+.3} ± {:.3} units per hand (z = {:.2})", c.mean_difference, c.stderr, result.validation.z);
+    say!("difference {:+.3} ± {:.3} units per hand (z = {:.2})", c.mean_difference, c.stderr, result.validation.z)?;
     Ok(())
 }

@@ -83,7 +83,7 @@ pub fn game(
     draws: &str,
     replacements: &str,
 ) -> Game {
-    Game::from_wall(family(), stacked(Seat::ALL[0], hands, draws, replacements), Seat::ALL[0])
+    Game::from_wall(family(), stacked(Seat::ALL[0], hands, draws, replacements), Seat::ALL[0]).unwrap()
 }
 
 pub fn tile(notation: &str) -> Tile {
@@ -91,3 +91,7 @@ pub fn tile(notation: &str) -> Tile {
 }
 
 pub const S: [Seat; 4] = Seat::ALL;
+
+pub fn seats(seats: &[Seat]) -> mjers_rules::seat::SeatSet {
+    seats.iter().copied().collect()
+}

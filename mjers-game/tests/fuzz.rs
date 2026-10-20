@@ -74,11 +74,11 @@ fn fuzz(rules: Ruleset) {
     let rules = Arc::new(rules);
     let (mut wins, mut kongs, mut claims) = (0, 0, 0);
     for seed in 0..GAMES {
-        let mut game = Game::new(rules.clone(), seed, Seat::ALL[(seed % 4) as usize]);
+        let mut game = Game::new(rules.clone(), seed, Seat::ALL[(seed % 4) as usize]).unwrap();
         let mut rng = Rng::seed(seed ^ 0xF00D);
         check_invariants(&game);
         while !game.is_over() {
-            let seat = game.to_act()[0];
+            let seat = game.to_act().first().unwrap();
             let legal = game.legal_actions(seat);
             assert!(!legal.is_empty(), "{seat} asked with no options");
             // Favour claims and kongs so rare paths get exercised.

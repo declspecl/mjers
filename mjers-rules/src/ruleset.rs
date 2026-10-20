@@ -88,7 +88,39 @@ impl Ruleset {
     pub const fn reserved_tiles(&self) -> usize {
         self.flower_wall_stacks as usize * 2
     }
+
+    /// Checks the settings can be played: the flower wall must leave enough
+    /// tiles to deal every hand and give the dealer a first draw.
+    pub fn validate(&self) -> Result<(), RulesError> {
+        if self.reserved_tiles() > MAX_RESERVED_TILES {
+            return Err(RulesError::FlowerWallTooLarge { stacks: self.flower_wall_stacks });
+        }
+        Ok(())
+    }
 }
+
+/// 144 tiles less four 13-tile hands and the dealer's first draw.
+const MAX_RESERVED_TILES: usize = 144 - 4 * 13 - 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RulesError {
+    FlowerWallTooLarge { stacks: u8 },
+}
+
+impl std::fmt::Display for RulesError {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            RulesError::FlowerWallTooLarge { stacks } => {
+                write!(f, "a flower wall of {stacks} stacks leaves too few tiles to deal (at most {} stacks)", MAX_RESERVED_TILES / 2)
+            },
+        }
+    }
+}
+
+impl std::error::Error for RulesError {}
 
 impl Default for Ruleset {
     fn default() -> Self {

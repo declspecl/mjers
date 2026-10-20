@@ -6,7 +6,7 @@
 //! Afterwards the champion is compared with the starting point on the next,
 //! disjoint seed block, which never influences selection.
 
-use mjers_bot::heuristic::{
+use mjers_bot::params::{
     ClaimRule,
     KongRule,
     Params,
@@ -20,7 +20,10 @@ use serde::{
 
 use crate::compare::compare;
 use crate::report::ComparisonResult;
-use crate::runner::Seeds;
+use crate::runner::{
+    HandFailure,
+    Seeds,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -117,7 +120,7 @@ fn spec(
 pub fn tune(
     rules: &Ruleset,
     config: &TuneConfig,
-) -> TuneResult {
+) -> Result<TuneResult, HandFailure> {
     let mut champion = config.start.clone();
     let mut trials = Vec::new();
     for round in 0..config.rounds {
@@ -125,7 +128,7 @@ pub fn tune(
         for dimension in Dimension::ALL {
             let mut best: Option<(f64, Params)> = None;
             for candidate in dimension.variants(&champion).into_iter().filter(|c| *c != champion) {
-                let c = compare(rules, &spec("candidate", &candidate), &spec("champion", &champion), &config.field, config.training);
+                let c = compare(rules, &spec("candidate", &candidate), &spec("champion", &champion), &config.field, config.training)?;
                 let wins = c.mean_difference > 0.0 && c.z() >= config.min_z;
                 trials.push(Trial {
                     round,
@@ -152,13 +155,13 @@ pub fn tune(
         }
     }
     let validation_seeds = config.training.next_block();
-    let validation = compare(rules, &spec("champion", &champion), &spec("start", &config.start), &config.field, validation_seeds).into();
-    TuneResult {
+    let validation = compare(rules, &spec("champion", &champion), &spec("start", &config.start), &config.field, validation_seeds)?.into();
+    Ok(TuneResult {
         champion,
         trials,
         validation_seeds,
         validation,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -190,7 +193,7 @@ mod tests {
             rounds: 1,
             min_z: 2.0,
         };
-        let result = tune(&Ruleset::family(), &config);
+        let result = tune(&Ruleset::family(), &config).unwrap();
         assert_eq!(result.validation_seeds, Seeds { start: 60, count: 60 });
         assert!(!result.trials.is_empty());
         assert_eq!(result.trials.iter().filter(|t| t.adopted).count() > 0, result.champion != config.start);

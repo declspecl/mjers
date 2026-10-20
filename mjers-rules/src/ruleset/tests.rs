@@ -50,3 +50,21 @@ fn checked_in_files_match_presets() {
         assert_eq!(serde_json::from_str::<Ruleset>(&file).unwrap(), Ruleset::preset(name).unwrap(), "{path}");
     }
 }
+
+#[test]
+fn validation_rejects_flower_walls_that_starve_the_deal() {
+    assert_eq!(Ruleset::family().validate(), Ok(()));
+    let huge = Ruleset {
+        flower_wall_stacks: 46,
+        ..Ruleset::family()
+    };
+    assert_eq!(huge.validate(), Err(RulesError::FlowerWallTooLarge { stacks: 46 }));
+    assert_eq!(
+        Ruleset {
+            flower_wall_stacks: 45,
+            ..Ruleset::family()
+        }
+        .validate(),
+        Ok(())
+    );
+}

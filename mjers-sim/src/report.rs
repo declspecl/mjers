@@ -126,7 +126,7 @@ mod tests {
     fn simulation_report_round_trips() {
         let table: [BotSpec; 4] = std::array::from_fn(|_| BotSpec::preset("efficiency").unwrap());
         let seeds = Seeds { start: 0, count: 20 };
-        let summary = simulate(&Ruleset::family(), &table, seeds);
+        let summary = simulate(&Ruleset::family(), &table, seeds).unwrap();
         let report = Report::new("simulation", Provenance::unknown(), Ruleset::family(), seeds, table.to_vec(), SimulationResult::from(summary));
         let json = serde_json::to_string_pretty(&report).unwrap();
         assert!(json.contains("\"schema\": 1"));

@@ -32,6 +32,7 @@ use serde::{
 };
 
 use crate::runner::{
+    HandFailure,
     Seeds,
     Table,
     play_hand,
@@ -86,8 +87,9 @@ pub fn features(
     game: &Game,
     table: &Table,
 ) -> Vec<HandFeatures> {
-    let result = game.result().expect("hand is over");
-    let settlement = game.settlement().expect("hand is over");
+    let (Some(result), Some(settlement)) = (game.result(), game.settlement()) else {
+        return Vec::new();
+    };
     let winning_tile = game.events().iter().rev().find_map(|e| match e {
         Event::Win { tile, .. } => Some(*tile),
         _ => None,
@@ -154,27 +156,65 @@ pub fn write_features(
     table: &Table,
     seeds: Seeds,
     mut out: impl Write,
-) -> std::io::Result<u64> {
+) -> Result<u64, FeatureLogError> {
     let rules = Arc::new(rules.clone());
     let mut rows = 0;
     let mut done = 0;
     while done < seeds.count {
         let chunk = CHUNK.min(seeds.count - done);
-        let lines: Vec<String> = (done..done + chunk)
+        let rows_by_hand: Vec<Vec<HandFeatures>> = (done..done + chunk)
             .into_par_iter()
-            .map(|i| {
-                let game = play_hand(&rules, table, seeds.start.wrapping_add(i));
-                features(&game, table).iter().map(|row| serde_json::to_string(row).expect("rows serialize") + "\n").collect()
-            })
-            .collect();
-        for line in &lines {
-            out.write_all(line.as_bytes())?;
+            .map(|i| play_hand(&rules, table, seeds.start.wrapping_add(i)).map(|game| features(&game, table)))
+            .collect::<Result<_, _>>()?;
+        for row in rows_by_hand.iter().flatten() {
+            serde_json::to_writer(&mut out, row)?;
+            out.write_all(b"\n")?;
+            rows += 1;
         }
-        rows += chunk * 4;
         done += chunk;
     }
     out.flush()?;
     Ok(rows)
+}
+
+#[derive(Debug)]
+pub enum FeatureLogError {
+    Hand(HandFailure),
+    Write(std::io::Error),
+    Encode(serde_json::Error),
+}
+
+impl std::fmt::Display for FeatureLogError {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        match self {
+            FeatureLogError::Hand(failure) => write!(f, "{failure}"),
+            FeatureLogError::Write(error) => write!(f, "writing feature rows: {error}"),
+            FeatureLogError::Encode(error) => write!(f, "encoding feature rows: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for FeatureLogError {}
+
+impl From<HandFailure> for FeatureLogError {
+    fn from(failure: HandFailure) -> Self {
+        FeatureLogError::Hand(failure)
+    }
+}
+
+impl From<std::io::Error> for FeatureLogError {
+    fn from(error: std::io::Error) -> Self {
+        FeatureLogError::Write(error)
+    }
+}
+
+impl From<serde_json::Error> for FeatureLogError {
+    fn from(error: serde_json::Error) -> Self {
+        FeatureLogError::Encode(error)
+    }
 }
 
 #[cfg(test)]
@@ -191,7 +231,7 @@ mod tests {
     fn rows_agree_with_the_game() {
         let rules = Arc::new(Ruleset::family());
         for seed in 0..100 {
-            let game = play_hand(&rules, &table(), seed);
+            let game = play_hand(&rules, &table(), seed).unwrap();
             let rows = features(&game, &table());
             assert_eq!(rows.iter().map(|r| r.units).sum::<i32>(), 0);
             let winners: Vec<_> = rows.iter().filter(|r| matches!(r.outcome, Outcome::WonSelfDraw | Outcome::WonDiscard)).collect();

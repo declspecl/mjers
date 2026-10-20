@@ -56,25 +56,25 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let opponents = load::strategy(&args.opponents)?;
     let seed = args.seed.unwrap_or_else(clock_seed);
     let human = Seat::new(args.seat).context("seat must be 0-3")?;
-    let mut game = Game::new(rules, seed, Seat::ALL[(seed % 4) as usize]);
+    let mut game = Game::new(rules, seed, Seat::ALL[(seed % 4) as usize])?;
     let mut policies: [Box<dyn Policy>; 4] = std::array::from_fn(|i| opponents.build(derive_seed(seed, i as u64)));
     let viewer = (!args.watch).then_some(human);
-    println!("seed {seed}, dealer {}, you are {human}", game.dealer());
+    say!("seed {seed}, dealer {}, you are {human}", game.dealer())?;
 
     let mut shown = 0;
     let stdin = std::io::stdin();
     let mut lines = stdin.lock().lines();
-    while let Some(&seat) = game.to_act().first() {
-        shown = print_events(&game, shown, viewer);
+    while let Some(seat) = game.to_act().first() {
+        shown = print_events(&game, shown, viewer)?;
         let action = if Some(seat) == viewer {
-            show_state(&game, seat);
+            show_state(&game, seat)?;
             if args.hint {
                 let config = AdviceConfig {
                     samples: args.hint_samples,
                     seed,
                     ..AdviceConfig::default()
                 };
-                print_advice(&advise(&game.observe(seat), &config), 3);
+                print_advice(&advise(&game.observe(seat), &config), 3)?;
             }
             prompt(&game, seat, &mut lines)?
         } else {
@@ -82,9 +82,10 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         };
         game.apply(seat, action)?;
     }
-    print_events(&game, shown, viewer);
-    let settlement = game.settlement().expect("hand is over");
-    println!("result: {:?}", settlement.total());
+    print_events(&game, shown, viewer)?;
+    if let Some(settlement) = game.settlement() {
+        say!("result: {:?}", settlement.total())?;
+    }
     Ok(())
 }
 
@@ -97,9 +98,9 @@ pub fn print_events(
     game: &Game,
     from: usize,
     viewer: Option<Seat>,
-) -> usize {
+) -> std::io::Result<usize> {
     let sees = |seat: Seat| viewer.is_none_or(|v| v == seat);
-    for event in &game.events()[from..] {
+    for event in game.events().get(from..).unwrap_or_default() {
         let line = match *event {
             Event::Deal { seat, tiles } if sees(seat) => format!("{seat} dealt {tiles}"),
             Event::Deal { .. } => continue,
@@ -121,24 +122,24 @@ pub fn print_events(
             } => format!("{seat} wins on {from}'s {tile}"),
             Event::Exhausted => "the wall is exhausted: no winner".to_string(),
         };
-        println!("  {line}");
+        say!("  {line}")?;
     }
-    game.events().len()
+    Ok(game.events().len())
 }
 
 fn show_state(
     game: &Game,
     seat: Seat,
-) {
+) -> std::io::Result<()> {
     let obs = game.observe(seat);
-    println!();
+    say!()?;
     for other in seat.others() {
         let melds: Vec<String> = obs.melds(other).map(|m| m.tiles().to_string()).collect();
         let discards: Vec<String> = obs.discards().iter().filter(|d| d.seat == other).map(|d| d.tile.to_string()).collect();
-        println!("{other}: {} hidden, melds [{}], discards {}", obs.concealed_count(other), melds.join(" "), discards.join(" "));
+        say!("{other}: {} hidden, melds [{}], discards {}", obs.concealed_count(other), melds.join(" "), discards.join(" "))?;
     }
-    println!("wall: {} live draws left", obs.live_wall());
-    println!("you:  {}", obs.hand());
+    say!("wall: {} live draws left", obs.live_wall())?;
+    say!("you:  {}", obs.hand())
 }
 
 fn prompt(
@@ -148,11 +149,11 @@ fn prompt(
 ) -> anyhow::Result<Action> {
     let legal = game.legal_actions(seat);
     for (i, action) in legal.iter().enumerate() {
-        print!("[{i}] {action}  ");
+        say_inline!("[{i}] {action}  ")?;
     }
-    println!();
+    say!()?;
     loop {
-        print!("> ");
+        say_inline!("> ")?;
         std::io::stdout().flush()?;
         let Some(line) = lines.next() else {
             bail!("input closed");
@@ -165,6 +166,6 @@ fn prompt(
         if let Some(action) = legal.iter().find(|a| matches!(a, Action::Discard(t) if t.to_string() == input) || a.to_string() == input) {
             return Ok(*action);
         }
-        println!("enter a number from the list, or a tile to discard");
+        say!("enter a number from the list, or a tile to discard")?;
     }
 }

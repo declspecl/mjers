@@ -16,6 +16,7 @@ use serde::{
 };
 
 use crate::runner::{
+    HandFailure,
     Seeds,
     Table,
     run,
@@ -68,8 +69,9 @@ impl Stats {
         game: &Game,
         seat: Seat,
     ) {
-        let result = game.result().expect("hand is over");
-        let settlement = game.settlement().expect("hand is over");
+        let (Some(result), Some(settlement)) = (game.result(), game.settlement()) else {
+            return;
+        };
         let total = settlement.total()[seat.index()] as i64;
         self.hands += 1;
         self.units += total;
@@ -181,7 +183,7 @@ pub fn simulate(
     rules: &Ruleset,
     table: &Table,
     seeds: Seeds,
-) -> Summary {
+) -> Result<Summary, HandFailure> {
     run(rules, table, seeds, |summary: &mut Summary, game| summary.record(table, game), Summary::merge)
 }
 
@@ -197,7 +199,7 @@ mod tests {
 
     #[test]
     fn summary_is_consistent() {
-        let summary = simulate(&Ruleset::family(), &efficiency_table(), Seeds { start: 0, count: 400 });
+        let summary = simulate(&Ruleset::family(), &efficiency_table(), Seeds { start: 0, count: 400 }).unwrap();
         assert_eq!(summary.hands, 400);
         let all = &summary.by_strategy["efficiency"];
         assert_eq!(all.hands, 1600);
@@ -215,7 +217,7 @@ mod tests {
         let mut table = efficiency_table();
         table[1] = BotSpec::preset("random").unwrap();
         table[3] = BotSpec::preset("random").unwrap();
-        let summary = simulate(&Ruleset::family(), &table, Seeds { start: 0, count: 300 });
+        let summary = simulate(&Ruleset::family(), &table, Seeds { start: 0, count: 300 }).unwrap();
         let efficient = summary.by_strategy["efficiency"].metrics();
         let random = summary.by_strategy["random"].metrics();
         assert!(efficient.ev > random.ev + 3.0 * (efficient.ev_stderr + random.ev_stderr), "{efficient:?} {random:?}");
@@ -225,8 +227,10 @@ mod tests {
     fn merge_matches_single_pass() {
         let rules = Ruleset::family();
         let table = efficiency_table();
-        let whole = simulate(&rules, &table, Seeds { start: 0, count: 60 });
-        let halves = simulate(&rules, &table, Seeds { start: 0, count: 30 }).merge(simulate(&rules, &table, Seeds { start: 30, count: 30 }));
+        let whole = simulate(&rules, &table, Seeds { start: 0, count: 60 }).unwrap();
+        let halves = simulate(&rules, &table, Seeds { start: 0, count: 30 })
+            .unwrap()
+            .merge(simulate(&rules, &table, Seeds { start: 30, count: 30 }).unwrap());
         assert_eq!(whole, halves);
     }
 

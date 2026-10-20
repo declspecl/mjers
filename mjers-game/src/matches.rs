@@ -44,21 +44,21 @@ pub struct Match {
 }
 
 impl Match {
+    /// A match of `hands` hands (at least one).
     pub fn new(
         rules: Arc<Ruleset>,
         seed: u64,
         hands: u32,
-    ) -> Match {
-        assert!(hands > 0, "a match has at least one hand");
-        let game = Game::new(rules.clone(), derive_seed(seed, 0), Seat::ALL[0]);
-        Match {
+    ) -> Result<Match, GameError> {
+        let game = Game::new(rules.clone(), derive_seed(seed, 0), Seat::ALL[0])?;
+        Ok(Match {
             rules,
             seed,
-            hands,
+            hands: hands.max(1),
             game,
             scores: [0; SEATS],
             history: Vec::new(),
-        }
+        })
     }
 
     pub fn game(&self) -> &Game {
@@ -72,29 +72,35 @@ impl Match {
         seat: Seat,
         action: Action,
     ) -> Result<(), GameError> {
+        if self.is_over() {
+            return Err(GameError::HandOver);
+        }
         self.game.apply(seat, action)?;
         if self.game.is_over() {
-            self.settle_hand();
+            self.settle_hand()?;
         }
         Ok(())
     }
 
-    fn settle_hand(&mut self) {
-        let settlement = self.game.settlement().expect("hand is over");
+    fn settle_hand(&mut self) -> Result<(), GameError> {
+        let (Some(result), Some(settlement)) = (self.game.result(), self.game.settlement()) else {
+            return Ok(());
+        };
         for (score, delta) in self.scores.iter_mut().zip(settlement.total()) {
             *score += delta as i64;
         }
+        let played = self.history.len() as u64;
         self.history.push(HandRecord {
-            seed: self.game.seed().expect("match hands are seeded"),
+            seed: derive_seed(self.seed, played),
             dealer: self.game.dealer(),
-            result: self.game.result().expect("hand is over").clone(),
+            result: result.clone(),
             settlement,
         });
-        let played = self.history.len() as u32;
-        if played < self.hands {
+        if (self.history.len() as u32) < self.hands {
             let dealer = self.game.dealer().next();
-            self.game = Game::new(self.rules.clone(), derive_seed(self.seed, played as u64), dealer);
+            self.game = Game::new(self.rules.clone(), derive_seed(self.seed, played + 1), dealer)?;
         }
+        Ok(())
     }
 
     pub fn is_over(&self) -> bool {
@@ -118,9 +124,9 @@ mod tests {
         seed: u64,
         hands: u32,
     ) -> Match {
-        let mut m = Match::new(Arc::new(Ruleset::family()), seed, hands);
+        let mut m = Match::new(Arc::new(Ruleset::family()), seed, hands).unwrap();
         while !m.is_over() {
-            let seat = m.game().to_act()[0];
+            let seat = m.game().to_act().first().unwrap();
             let legal = m.game().legal_actions(seat);
             let action = [Action::Win, Action::SelfDrawWin, Action::Pong]
                 .into_iter()

@@ -30,10 +30,14 @@ pub enum WallTile {
 
 /// Every tile in a set: four of each playable kind, then the eight bonus tiles.
 pub fn full_set() -> [WallTile; WALL_SIZE] {
-    let mut tiles = Tile::all()
+    let mut set = [WallTile::Bonus(Bonus::Flower(1)); WALL_SIZE];
+    let tiles = Tile::all()
         .flat_map(|t| std::iter::repeat_n(WallTile::Tile(t), COPIES as usize))
         .chain(Bonus::all().map(WallTile::Bonus));
-    std::array::from_fn(|_| tiles.next().expect("144 tiles"))
+    for (slot, tile) in set.iter_mut().zip(tiles) {
+        *slot = tile;
+    }
+    set
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,35 +59,34 @@ impl Wall {
     }
 
     /// A wall in exactly this order; the first tile is drawn first.
+    /// `reserved` beyond the wall's size reserves the whole wall.
     pub fn from_order(
         tiles: [WallTile; WALL_SIZE],
         reserved: usize,
     ) -> Wall {
-        assert!(reserved <= WALL_SIZE);
         Wall {
             tiles,
             front: 0,
             back: WALL_SIZE as u8,
-            reserved: reserved as u8,
+            reserved: reserved.min(WALL_SIZE) as u8,
         }
     }
 
     /// A partly drawn wall holding exactly `tiles`, drawn from the front.
+    /// `None` if there are more tiles than a full wall holds.
     pub fn from_remaining(
         tiles: &[WallTile],
         reserved: usize,
-    ) -> Wall {
-        assert!(tiles.len() <= WALL_SIZE);
-        let front = WALL_SIZE - tiles.len();
-        let filler = tiles.first().copied().unwrap_or(WallTile::Tile(Tile::from_index(0).expect("tile 0")));
-        let mut all = [filler; WALL_SIZE];
+    ) -> Option<Wall> {
+        let front = WALL_SIZE.checked_sub(tiles.len())?;
+        let mut all = [WallTile::Bonus(Bonus::Flower(1)); WALL_SIZE];
         all[front..].copy_from_slice(tiles);
-        Wall {
+        Some(Wall {
             tiles: all,
             front: front as u8,
             back: WALL_SIZE as u8,
-            reserved: reserved as u8,
-        }
+            reserved: reserved.min(WALL_SIZE) as u8,
+        })
     }
 
     pub const fn remaining(&self) -> usize {

@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use mjers_bot::policy::{
+    Policy,
     decide,
-    play_out,
 };
 use mjers_bot::spec::BotSpec;
+use mjers_game::action::GameError;
 use mjers_game::game::Game;
 use mjers_game::rng::derive_seed;
 use mjers_rules::ruleset::Ruleset;
@@ -47,12 +48,8 @@ pub fn play_hand(
     rules: &Arc<Ruleset>,
     table: &Table,
     seed: u64,
-) -> Game {
-    let dealer = Seat::ALL[(seed % 4) as usize];
-    let mut game = Game::new(rules.clone(), seed, dealer);
-    let mut policies = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
-    play_out(&mut game, &mut policies);
-    game
+) -> Result<Game, HandFailure> {
+    play_hand_watched(rules, table, seed, |_| {})
 }
 
 /// Like `play_hand`, calling `watch` after the deal and after every action.
@@ -61,17 +58,57 @@ pub fn play_hand_watched(
     table: &Table,
     seed: u64,
     mut watch: impl FnMut(&Game),
-) -> Game {
+) -> Result<Game, HandFailure> {
+    let failed = |error| HandFailure { seed, error };
     let dealer = Seat::ALL[(seed % 4) as usize];
-    let mut game = Game::new(rules.clone(), seed, dealer);
-    let mut policies: [Box<dyn mjers_bot::policy::Policy>; 4] = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
+    let mut game = Game::new(rules.clone(), seed, dealer).map_err(failed)?;
+    let mut policies: [Box<dyn Policy>; 4] = std::array::from_fn(|i| table[i].build(derive_seed(seed, i as u64)));
     watch(&game);
-    while let Some(&seat) = game.to_act().first() {
+    while let Some(seat) = game.to_act().first() {
         let action = decide(&game, seat, &mut *policies[seat.index()]);
-        game.apply(seat, action).expect("policies choose legal actions");
+        game.apply(seat, action).map_err(failed)?;
         watch(&game);
     }
-    game
+    Ok(game)
+}
+
+/// A hand that could not be played, with the seed that reproduces it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandFailure {
+    pub seed: u64,
+    pub error: GameError,
+}
+
+impl std::fmt::Display for HandFailure {
+    fn fmt(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+    ) -> std::fmt::Result {
+        write!(f, "hand with seed {} failed: {}", self.seed, self.error)
+    }
+}
+
+impl std::error::Error for HandFailure {}
+
+/// Runs `step` for every index in `0..count` in parallel, folding into `A`;
+/// stops at the first failure.
+pub(crate) fn par_try_fold<A, S, M>(
+    count: u64,
+    step: S,
+    merge: M,
+) -> Result<A, HandFailure>
+where
+    A: Default + Send,
+    S: Fn(&mut A, u64) -> Result<(), HandFailure> + Sync + Send,
+    M: Fn(A, A) -> A + Sync + Send,
+{
+    (0..count)
+        .into_par_iter()
+        .try_fold(A::default, |mut acc, i| {
+            step(&mut acc, i)?;
+            Ok(acc)
+        })
+        .try_reduce(A::default, |a, b| Ok(merge(a, b)))
 }
 
 /// Plays every seed in parallel, folding finished hands into `A`.
@@ -81,21 +118,21 @@ pub fn run<A, F, M>(
     seeds: Seeds,
     record: F,
     merge: M,
-) -> A
+) -> Result<A, HandFailure>
 where
     A: Default + Send,
     F: Fn(&mut A, &Game) + Sync + Send,
     M: Fn(A, A) -> A + Sync + Send,
 {
     let rules = Arc::new(rules.clone());
-    (0..seeds.count)
-        .into_par_iter()
-        .fold(A::default, |mut acc, i| {
-            let game = play_hand(&rules, table, seeds.start.wrapping_add(i));
-            record(&mut acc, &game);
-            acc
-        })
-        .reduce(A::default, merge)
+    par_try_fold(
+        seeds.count,
+        |acc, i| {
+            record(acc, &play_hand(&rules, table, seeds.start.wrapping_add(i))?);
+            Ok(())
+        },
+        merge,
+    )
 }
 
 #[cfg(test)]
@@ -120,19 +157,20 @@ mod tests {
                     a
                 },
             )
+            .unwrap()
         };
         let mut parallel = totals(());
         parallel.sort();
         let sequential: Vec<_> = seeds
             .iter()
-            .map(|s| (s, play_hand(&Arc::new(Ruleset::family()), &table("efficiency"), s).settlement().unwrap().total()))
+            .map(|s| (s, play_hand(&Arc::new(Ruleset::family()), &table("efficiency"), s).unwrap().settlement().unwrap().total()))
             .collect();
         assert_eq!(parallel, sequential);
     }
 
     #[test]
     fn dealer_follows_the_seed() {
-        let game = play_hand(&Arc::new(Ruleset::family()), &table("random"), 6);
+        let game = play_hand(&Arc::new(Ruleset::family()), &table("random"), 6).unwrap();
         assert_eq!(game.dealer(), Seat::ALL[2]);
     }
 

@@ -26,43 +26,46 @@ use mjers_game::rng::{
     Rng,
     derive_seed,
 };
-use mjers_game::wall::{
-    WallTile,
-    full_set,
-};
+use mjers_game::wall::WallTile;
 use mjers_hand::hand::Hand;
-use mjers_rules::seat::Seat;
+use mjers_rules::ruleset::Ruleset;
+use mjers_rules::seat::{
+    SEATS,
+    Seat,
+};
 use mjers_rules::settlement::WinSource;
-use mjers_tile::counts::TileCounts;
+use mjers_tile::counts::{
+    COPIES,
+    TileCounts,
+};
+use mjers_tile::tile::{
+    Bonus,
+    Tile,
+};
 use serde::{
     Deserialize,
     Serialize,
 };
 
-/// One way the hidden tiles could lie, given what `obs` shows.
+/// One way the hidden tiles could lie, given what `obs` shows. `None` if the
+/// observation has no decision or its tile counts cannot be satisfied.
 pub fn sample_position(
     obs: &Observation<'_>,
     rng: &mut Rng,
-) -> Position {
+) -> Option<Position> {
     let seat = obs.seat();
-    let mut hidden: Vec<WallTile> = full_set().to_vec();
-    let mut take = |tile: WallTile| {
-        let i = hidden.iter().position(|&t| t == tile).expect("visible tiles come from the set");
-        hidden.swap_remove(i);
+    let point = match obs.decision() {
+        Decision::Turn { after_claim, drawn } => ResumePoint::Turn { seat, after_claim, last_draw: drawn },
+        Decision::Claim { tile, from, offer } => ResumePoint::Claim { tile, from, offer },
+        Decision::None => return None,
     };
-    for tile in obs.hand().concealed().tiles().chain(obs.public_tiles().tiles()) {
-        take(WallTile::Tile(tile));
-    }
-    for s in Seat::ALL {
-        for bonus in obs.bonus(s).iter() {
-            take(WallTile::Bonus(bonus));
-        }
-    }
-    let (mut tiles, bonuses): (Vec<WallTile>, Vec<WallTile>) = hidden.into_iter().partition(|t| matches!(t, WallTile::Tile(_)));
-    rng.shuffle(&mut tiles);
+    let own = obs.hand().concealed();
+    let public = obs.public_tiles();
+    let mut hidden: Vec<Tile> = Tile::all().flat_map(|t| std::iter::repeat_n(t, COPIES.saturating_sub(own.get(t) + public.get(t)) as usize)).collect();
+    rng.shuffle(&mut hidden);
 
-    let mut concealed: [TileCounts; 4] = Default::default();
-    concealed[seat.index()] = *obs.hand().concealed();
+    let mut concealed_by_seat: [TileCounts; SEATS] = Default::default();
+    concealed_by_seat[seat.index()] = *own;
     // A player adding to a kong that may be robbed must hold the tile.
     if let Decision::Claim {
         tile,
@@ -70,33 +73,35 @@ pub fn sample_position(
         offer: Offer::KongUpgrade,
     } = obs.decision()
     {
-        let i = tiles.iter().position(|&t| t == WallTile::Tile(tile)).expect("the kong tile is unseen");
-        tiles.swap_remove(i);
-        concealed[from.index()].add(tile);
+        let i = hidden.iter().position(|&t| t == tile)?;
+        hidden.swap_remove(i);
+        concealed_by_seat[from.index()].add(tile);
     }
     for other in seat.others() {
-        while concealed[other.index()].len() < obs.concealed_count(other) {
-            let WallTile::Tile(tile) = tiles.pop().expect("enough hidden tiles") else { unreachable!() };
-            concealed[other.index()].add(tile);
+        while concealed_by_seat[other.index()].len() < obs.concealed_count(other) {
+            concealed_by_seat[other.index()].add(hidden.pop()?);
         }
     }
-    let mut wall: Vec<WallTile> = tiles.into_iter().chain(bonuses).collect();
+    let held_bonuses: Vec<Bonus> = Seat::ALL.iter().flat_map(|&s| obs.bonus(s).iter()).collect();
+    let unseen_bonuses = Bonus::all().filter(|b| !held_bonuses.contains(b)).map(WallTile::Bonus);
+    let mut wall: Vec<WallTile> = hidden.into_iter().map(WallTile::Tile).chain(unseen_bonuses).collect();
     rng.shuffle(&mut wall);
-    debug_assert_eq!(wall.len(), obs.wall_remaining());
+    if wall.len() != obs.wall_remaining() {
+        return None;
+    }
 
-    let point = match obs.decision() {
-        Decision::Turn { after_claim, drawn } => ResumePoint::Turn { seat, after_claim, last_draw: drawn },
-        Decision::Claim { tile, from, offer } => ResumePoint::Claim { tile, from, offer },
-        Decision::None => panic!("{seat} has no decision to sample for"),
-    };
-    Position {
-        hands: Seat::ALL.map(|s| Hand::from_parts(concealed[s.index()], obs.melds(s), obs.bonus(s))),
+    let mut hands = [Hand::new(TileCounts::new()); SEATS];
+    for s in Seat::ALL {
+        hands[s.index()] = Hand::from_parts(concealed_by_seat[s.index()], obs.melds(s), obs.bonus(s)).ok()?;
+    }
+    Some(Position {
+        hands,
         wall,
         dealer: obs.dealer(),
         discards: obs.discards().to_vec(),
-        public: *obs.public_tiles(),
+        public: *public,
         point,
-    }
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -114,7 +119,9 @@ pub struct Estimate {
     pub difference_stderr: f64,
 }
 
-/// Plays each of `actions` out from `samples` sampled positions.
+/// Plays each of `actions` out from up to `samples` sampled positions.
+/// A sample that cannot be played for every action is skipped for all of
+/// them, so the estimates stay paired.
 pub fn estimate(
     obs: &Observation<'_>,
     actions: &[Action],
@@ -124,48 +131,70 @@ pub fn estimate(
 ) -> Vec<Estimate> {
     let seat = obs.seat();
     let rules = Arc::new(obs.rules().clone());
-    #[derive(Default, Clone)]
-    struct Tally {
-        units: Vec<f64>,
-        wins: u32,
-        deal_ins: u32,
-    }
-    let mut tallies = vec![Tally::default(); actions.len()];
+    let mut outcomes_by_action: Vec<Vec<Outcome>> = vec![Vec::with_capacity(samples as usize); actions.len()];
     for i in 0..samples as u64 {
-        let position = sample_position(obs, &mut Rng::seed(derive_seed(seed, i)));
-        for (action, tally) in actions.iter().zip(&mut tallies) {
-            let mut game = Game::resume(rules.clone(), position.clone());
-            game.apply(seat, *action).expect("candidate actions are legal");
-            let mut policies = std::array::from_fn(|k| rollout.build(derive_seed(seed ^ 0x5EED, i * 4 + k as u64)));
-            play_out(&mut game, &mut policies);
-            let units = game.settlement().expect("over").total()[seat.index()] as f64;
-            tally.units.push(units);
-            if let Some(win) = game.result().expect("over").win {
-                tally.wins += (win.winner == seat) as u32;
-                tally.deal_ins += (win.source == WinSource::Discard(seat)) as u32;
+        let Some(position) = sample_position(obs, &mut Rng::seed(derive_seed(seed, i))) else {
+            continue;
+        };
+        let played: Option<Vec<Outcome>> = actions
+            .iter()
+            .map(|&action| play_from(&rules, &position, seat, action, rollout, derive_seed(seed ^ 0x5EED, i)))
+            .collect();
+        if let Some(played) = played {
+            for (outcomes, outcome) in outcomes_by_action.iter_mut().zip(played) {
+                outcomes.push(outcome);
             }
         }
     }
-    let n = samples.max(1) as f64;
-    let first = tallies.first().map(|t| t.units.clone()).unwrap_or_default();
+    let first = outcomes_by_action.first().cloned().unwrap_or_default();
     actions
         .iter()
-        .zip(&tallies)
-        .map(|(&action, t)| {
-            let (ev, ev_stderr) = mean_and_stderr(t.units.iter().copied());
-            let (difference, difference_stderr) = mean_and_stderr(t.units.iter().zip(&first).map(|(a, b)| a - b));
+        .zip(&outcomes_by_action)
+        .map(|(&action, outcomes)| {
+            let n = outcomes.len().max(1) as f64;
+            let (ev, ev_stderr) = mean_and_stderr(outcomes.iter().map(|o| o.units));
+            let (difference, difference_stderr) = mean_and_stderr(outcomes.iter().zip(&first).map(|(a, b)| a.units - b.units));
             Estimate {
                 action,
-                samples,
+                samples: outcomes.len() as u32,
                 ev,
                 ev_stderr,
-                win_rate: t.wins as f64 / n,
-                deal_in_rate: t.deal_ins as f64 / n,
+                win_rate: outcomes.iter().filter(|o| o.won).count() as f64 / n,
+                deal_in_rate: outcomes.iter().filter(|o| o.dealt_in).count() as f64 / n,
                 difference,
                 difference_stderr,
             }
         })
         .collect()
+}
+
+/// How one playout ended for the advised seat.
+#[derive(Debug, Clone, Copy)]
+struct Outcome {
+    units: f64,
+    won: bool,
+    dealt_in: bool,
+}
+
+fn play_from(
+    rules: &Arc<Ruleset>,
+    position: &Position,
+    seat: Seat,
+    action: Action,
+    rollout: &BotSpec,
+    seed: u64,
+) -> Option<Outcome> {
+    let mut game = Game::resume(rules.clone(), position.clone()).ok()?;
+    game.apply(seat, action).ok()?;
+    let mut policies = std::array::from_fn(|k| rollout.build(derive_seed(seed, k as u64)));
+    play_out(&mut game, &mut policies).ok()?;
+    let units = game.settlement()?.total()[seat.index()] as f64;
+    let win = game.result()?.win;
+    Some(Outcome {
+        units,
+        won: win.is_some_and(|w| w.winner == seat),
+        dealt_in: win.is_some_and(|w| w.source == WinSource::Discard(seat)),
+    })
 }
 
 fn mean_and_stderr(values: impl Iterator<Item = f64> + Clone) -> (f64, f64) {
@@ -183,10 +212,10 @@ mod tests {
     use super::*;
 
     fn midgame(seed: u64) -> Game {
-        let mut game = Game::new(Arc::new(Ruleset::family()), seed, Seat::ALL[0]);
+        let mut game = Game::new(Arc::new(Ruleset::family()), seed, Seat::ALL[0]).unwrap();
         let mut bot = mjers_bot::heuristic::HeuristicBot::efficiency();
         for _ in 0..(20 + seed % 20) {
-            let Some(&seat) = game.to_act().first() else { break };
+            let Some(seat) = game.to_act().first() else { break };
             let action = mjers_bot::policy::decide(&game, seat, &mut bot);
             game.apply(seat, action).unwrap();
         }
@@ -197,9 +226,9 @@ mod tests {
     fn samples_keep_everything_the_seat_can_see() {
         for seed in 0..40 {
             let game = midgame(seed);
-            let Some(&seat) = game.to_act().first() else { continue };
+            let Some(seat) = game.to_act().first() else { continue };
             let obs = game.observe(seat);
-            let position = sample_position(&obs, &mut Rng::seed(seed));
+            let position = sample_position(&obs, &mut Rng::seed(seed)).unwrap();
             assert_eq!(position.hands[seat.index()], *game.hand(seat));
             for other in seat.others() {
                 let sampled = position.hands[other.index()];
@@ -211,7 +240,7 @@ mod tests {
             let held: usize = position.hands.iter().map(|h| h.concealed().len() + h.bonus().len() as usize).sum();
             let melded_or_discarded = position.public.len();
             assert_eq!(held + melded_or_discarded + position.wall.len(), WALL_SIZE, "seed {seed}");
-            let resumed = Game::resume(Arc::new(Ruleset::family()), position);
+            let resumed = Game::resume(Arc::new(Ruleset::family()), position).unwrap();
             assert_eq!(resumed.legal_actions(seat), game.legal_actions(seat));
         }
     }
@@ -219,7 +248,7 @@ mod tests {
     #[test]
     fn estimates_are_deterministic_and_paired() {
         let game = midgame(7);
-        let seat = game.to_act()[0];
+        let seat = game.to_act().first().unwrap();
         let obs = game.observe(seat);
         let actions = obs.legal_actions();
         let rollout = BotSpec::preset("efficiency").unwrap();

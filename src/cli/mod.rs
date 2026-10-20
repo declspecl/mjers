@@ -1,3 +1,20 @@
+/// Like `println!`, but returns write errors (such as a closed pipe)
+/// instead of panicking.
+macro_rules! say {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        writeln!(std::io::stdout().lock(), $($arg)*)
+    }};
+}
+
+/// Like `print!`, returning write errors.
+macro_rules! say_inline {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        write!(std::io::stdout().lock(), $($arg)*)
+    }};
+}
+
 mod advise;
 mod analyze;
 mod compare;

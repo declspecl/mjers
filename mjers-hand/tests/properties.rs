@@ -169,8 +169,10 @@ proptest! {
         prop_assert!(after >= before - 1 && after <= before, "{} + {}: {} -> {}", hand, Tile::from_index(draw).unwrap(), before, after);
     }
 
+    /// Hands holding all four copies of a tile are excluded: the formula
+    /// ignores the copy limit there (see the shanten module docs).
     #[test]
-    fn shanten_matches_swap_distance(counts in small_hands(7)) {
+    fn shanten_matches_swap_distance(counts in small_hands(7).prop_filter("at most three copies", |c| c.iter().all(|&n| n < 4))) {
         let hand = to_counts(&counts);
         prop_assert_eq!(shanten(&hand, 2), reference_shanten(counts, 2), "{}", hand);
     }

@@ -96,6 +96,7 @@ pub struct Trace {
 pub enum ReplayError {
     Version(u32),
     Wall(usize),
+    Setup(GameError),
     Step { index: usize, error: GameError },
     Diverged,
 }
@@ -108,6 +109,7 @@ impl fmt::Display for ReplayError {
         match self {
             ReplayError::Version(v) => write!(f, "unsupported trace version {v}"),
             ReplayError::Wall(n) => write!(f, "wall has {n} tiles, expected {WALL_SIZE}"),
+            ReplayError::Setup(error) => write!(f, "cannot start the hand: {error}"),
             ReplayError::Step { index, error } => write!(f, "step {index}: {error}"),
             ReplayError::Diverged => write!(f, "replay does not reproduce the recorded events"),
         }
@@ -139,7 +141,7 @@ impl Trace {
         }
         let wall: [WallTile; WALL_SIZE] = self.wall.clone().try_into().map_err(|w: Vec<_>| ReplayError::Wall(w.len()))?;
         let reserved = self.rules.reserved_tiles();
-        let mut game = Game::from_wall(Arc::new(self.rules.clone()), Wall::from_order(wall, reserved), self.dealer);
+        let mut game = Game::from_wall(Arc::new(self.rules.clone()), Wall::from_order(wall, reserved), self.dealer).map_err(ReplayError::Setup)?;
         for (index, step) in self.steps.iter().enumerate() {
             game.apply(step.seat, step.action).map_err(|error| ReplayError::Step { index, error })?;
         }

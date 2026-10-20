@@ -30,8 +30,8 @@ pub struct ReplayArgs {
 pub fn record(args: RecordArgs) -> anyhow::Result<()> {
     let rules: Arc<Ruleset> = Arc::new(load::ruleset(&args.rules)?);
     let spec = load::strategy(&args.strategy)?;
-    let game = play_hand(&rules, &std::array::from_fn(|_| spec.clone()), args.seed);
-    println!("{}", serde_json::to_string_pretty(&game.trace())?);
+    let game = play_hand(&rules, &std::array::from_fn(|_| spec.clone()), args.seed)?;
+    say!("{}", serde_json::to_string_pretty(&game.trace())?)?;
     Ok(())
 }
 
@@ -40,11 +40,11 @@ pub fn replay(args: ReplayArgs) -> anyhow::Result<()> {
     let text = std::fs::read_to_string(&args.file).with_context(|| format!("reading {}", args.file))?;
     let trace: Trace = serde_json::from_str(&text).with_context(|| format!("parsing {}", args.file))?;
     let game = trace.replay()?;
-    println!("replayed {} steps; dealer {}, rules {}", trace.steps.len(), game.dealer(), trace.rules.name);
-    print_events(&game, 0, None);
+    say!("replayed {} steps; dealer {}, rules {}", trace.steps.len(), game.dealer(), trace.rules.name)?;
+    print_events(&game, 0, None)?;
     let totals = game.settlement().expect("a recorded hand is over").total();
     for seat in Seat::ALL {
-        println!("{seat}: {:+}", totals[seat.index()]);
+        say!("{seat}: {:+}", totals[seat.index()])?;
     }
     Ok(())
 }

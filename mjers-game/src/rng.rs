@@ -50,12 +50,14 @@ impl Rng {
         result
     }
 
-    /// Uniform in `0..bound` (Lemire's method, unbiased).
+    /// Uniform in `0..bound` (Lemire's method, unbiased); 0 for an empty range.
     pub fn below(
         &mut self,
         bound: u64,
     ) -> u64 {
-        assert!(bound > 0, "empty range");
+        if bound == 0 {
+            return 0;
+        }
         let threshold = bound.wrapping_neg() % bound;
         loop {
             let product = self.next_u64() as u128 * bound as u128;

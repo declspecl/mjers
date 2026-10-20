@@ -101,22 +101,22 @@ impl Hand {
         }
     }
 
-    /// A hand mid-play. Panics on more than four melds.
+    /// A hand mid-play; at most four melds.
     pub fn from_parts(
         concealed: TileCounts,
         melds: impl IntoIterator<Item = Meld>,
         bonus: BonusSet,
-    ) -> Self {
+    ) -> Result<Self, HandError> {
         let mut hand = Hand {
             concealed,
             melds: [None; MAX_MELDS],
             bonus,
         };
         for meld in melds {
-            hand.ensure_meld_slot().expect("at most four melds");
+            hand.ensure_meld_slot()?;
             hand.push_meld(meld);
         }
-        hand
+        Ok(hand)
     }
 
     pub const fn concealed(&self) -> &TileCounts {

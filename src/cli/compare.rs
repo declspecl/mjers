@@ -37,19 +37,19 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let rules = load::ruleset(&args.rules)?;
     let (a, b, field) = (load::strategy(&args.a)?, load::strategy(&args.b)?, load::strategy(&args.field)?);
     let seeds = Seeds { start: args.seed, count: args.hands };
-    let result = ComparisonResult::from(compare(&rules, &a, &b, &field, seeds));
+    let result = ComparisonResult::from(compare(&rules, &a, &b, &field, seeds)?);
     if args.json {
         let report = Report::new("comparison", provenance::current(), rules, seeds, vec![a, b, field], result);
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        say!("{}", serde_json::to_string_pretty(&report)?)?;
         return Ok(());
     }
     let c = &result.comparison;
-    println!("{} vs {} against a {} field, {} hands × 4 seats, rules {}", c.a, c.b, c.field, args.hands, rules.name);
-    println!();
-    print_header("candidate");
-    print_row(&c.a, &result.a_metrics);
-    print_row(&c.b, &result.b_metrics);
-    println!();
-    println!("difference {:+.3} ± {:.3} units per hand (z = {:.2})", c.mean_difference, c.stderr, result.z);
+    say!("{} vs {} against a {} field, {} hands × 4 seats, rules {}", c.a, c.b, c.field, args.hands, rules.name)?;
+    say!()?;
+    print_header("candidate")?;
+    print_row(&c.a, &result.a_metrics)?;
+    print_row(&c.b, &result.b_metrics)?;
+    say!()?;
+    say!("difference {:+.3} ± {:.3} units per hand (z = {:.2})", c.mean_difference, c.stderr, result.z)?;
     Ok(())
 }

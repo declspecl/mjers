@@ -9,10 +9,61 @@ use mjers_tile::counts::{
     COPIES,
     TileCounts,
 };
+use mjers_tile::set::TileSet;
 use mjers_tile::tile::{
     SUITED_KINDS,
     Tile,
 };
+
+/// What one seat can infer about every opponent, gathered once per decision.
+pub struct Threats {
+    unseen: TileCounts,
+    threat_by_opponent: [Threat; 3],
+}
+
+/// One opponent: how ready they look, and the tiles they have let pass.
+#[derive(Debug, Clone, Copy)]
+pub struct Threat {
+    pub seat: Seat,
+    pub readiness: f64,
+    pub passed: TileSet,
+}
+
+impl Threats {
+    pub fn assess(obs: &Observation<'_>) -> Threats {
+        let mut opponents = obs.seat().others();
+        let threat_by_opponent = std::array::from_fn(|_| {
+            let seat = opponents.next().unwrap_or(obs.seat());
+            Threat {
+                seat,
+                readiness: readiness(obs, seat),
+                passed: passed(obs, seat),
+            }
+        });
+        Threats {
+            unseen: unseen(obs),
+            threat_by_opponent,
+        }
+    }
+
+    /// Expected number of opponents `tile` deals into, roughly.
+    pub fn danger(
+        &self,
+        tile: Tile,
+    ) -> f64 {
+        let weight = wait_weight(tile, &self.unseen) / MAX_WEIGHT;
+        self.threat_by_opponent.iter().filter(|t| !t.passed.contains(tile)).map(|t| t.readiness).sum::<f64>() * weight
+    }
+
+    /// The readiness of the most dangerous-looking opponent.
+    pub fn max_readiness(&self) -> f64 {
+        self.threat_by_opponent.iter().map(|t| t.readiness).fold(0.0, f64::max)
+    }
+
+    pub fn opponents(&self) -> &[Threat; 3] {
+        &self.threat_by_opponent
+    }
+}
 
 /// Rough chance an opponent is ready: grows with exposed melds and with how
 /// long they have been playing.
@@ -38,7 +89,7 @@ pub fn wait_weight(
     tile: Tile,
     unseen: &TileCounts,
 ) -> f64 {
-    let live = |t: Tile| unseen.get(t) > 0;
+    let live = |offset: isize| tile.index().checked_add_signed(offset).and_then(Tile::from_index).is_some_and(|t| unseen.get(t) > 0);
     let mut weight = 0.0;
     if unseen.get(tile) >= 1 {
         weight += 0.3;
@@ -51,14 +102,13 @@ pub fn wait_weight(
         return weight;
     }
     let rank = i % 9;
-    let at = |offset: isize| Tile::from_index((i as isize + offset) as usize).expect("checked in-suit");
-    if rank >= 2 && live(at(-2)) && live(at(-1)) {
+    if rank >= 2 && live(-2) && live(-1) {
         weight += 1.0;
     }
-    if rank <= 6 && live(at(1)) && live(at(2)) {
+    if rank <= 6 && live(1) && live(2) {
         weight += 1.0;
     }
-    if (1..=7).contains(&rank) && live(at(-1)) && live(at(1)) {
+    if (1..=7).contains(&rank) && live(-1) && live(1) {
         weight += 0.5;
     }
     weight
@@ -70,28 +120,13 @@ pub fn wait_weight(
 pub fn passed(
     obs: &Observation<'_>,
     opponent: Seat,
-) -> TileCounts {
+) -> TileSet {
     let discards = obs.discards();
     let since = discards.iter().rposition(|d| d.seat == opponent).map_or(0, |i| i + 1);
-    let mut passed = TileCounts::new();
-    for d in &discards[since..] {
-        if d.seat != opponent && passed.get(d.tile) == 0 {
-            passed.add(d.tile);
-        }
-    }
-    passed
+    discards.get(since..).unwrap_or_default().iter().filter(|d| d.seat != opponent).map(|d| d.tile).collect()
 }
 
-/// Expected number of opponents `tile` deals into, roughly.
-pub fn danger(
-    obs: &Observation<'_>,
-    tile: Tile,
-    unseen: &TileCounts,
-) -> f64 {
-    let weight = wait_weight(tile, unseen) / MAX_WEIGHT;
-    obs.seat().others().filter(|&o| passed(obs, o).get(tile) == 0).map(|o| readiness(obs, o)).sum::<f64>() * weight
-}
-
+/// The largest `wait_weight`, used to scale danger into roughly 0..=1 per opponent.
 const MAX_WEIGHT: f64 = 3.3;
 
 #[cfg(test)]
@@ -150,10 +185,10 @@ mod passed_tests {
 
     #[test]
     fn passed_tiles_are_those_discarded_after_the_opponents_last_discard() {
-        let mut game = Game::new(Arc::new(Ruleset::family()), 1, Seat::ALL[0]);
+        let mut game = Game::new(Arc::new(Ruleset::family()), 1, Seat::ALL[0]).unwrap();
         let mut discarded = Vec::new();
         for _ in 0..6 {
-            while let Some(&seat) = game.to_act().first() {
+            while let Some(seat) = game.to_act().first() {
                 let legal = game.legal_actions(seat);
                 if legal.contains(&Action::Pass) {
                     game.apply(seat, Action::Pass).unwrap();
@@ -168,12 +203,7 @@ mod passed_tests {
         // Six discards in turn order 0, 1, 2, 3, 0, 1 with every claim passed;
         // seat 2's latest was the third, so it has passed everything after.
         let obs = game.observe(Seat::ALL[0]);
-        let mut expected = TileCounts::new();
-        for &(seat, tile) in &discarded[3..] {
-            if seat != Seat::ALL[2] && expected.get(tile) == 0 {
-                expected.add(tile);
-            }
-        }
+        let expected: TileSet = discarded[3..].iter().filter(|(seat, _)| *seat != Seat::ALL[2]).map(|(_, tile)| *tile).collect();
         assert_eq!(passed(&obs, Seat::ALL[2]), expected);
     }
 }

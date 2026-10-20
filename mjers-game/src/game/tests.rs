@@ -21,8 +21,8 @@ fn tiles_accounted_for(game: &Game) -> usize {
 #[test]
 fn deal_gives_dealer_fourteen() {
     for seed in 0..50 {
-        let game = Game::new(family(), seed, S[2]);
-        assert_eq!(game.to_act(), [S[2]]);
+        let game = Game::new(family(), seed, S[2]).unwrap();
+        assert_eq!(game.to_act(), seats(&[S[2]]));
         for seat in S {
             let expected = if seat == S[2] { DEALT_TILES + 1 } else { DEALT_TILES };
             assert_eq!(game.hand(seat).size(), expected, "seed {seed} {seat}");
@@ -33,9 +33,9 @@ fn deal_gives_dealer_fourteen() {
 
 #[test]
 fn seed_determines_the_deal() {
-    let a = Game::new(family(), 11, S[0]);
-    let b = Game::new(family(), 11, S[0]);
-    let c = Game::new(family(), 12, S[0]);
+    let a = Game::new(family(), 11, S[0]).unwrap();
+    let b = Game::new(family(), 11, S[0]).unwrap();
+    let c = Game::new(family(), 12, S[0]).unwrap();
     assert!(S.iter().all(|&s| a.hand(s) == b.hand(s)));
     assert!(S.iter().any(|&s| a.hand(s) != c.hand(s)));
 }
@@ -74,7 +74,7 @@ const PLAIN: [&str; 4] = ["123456789m1234z", "123456789p1234z", "123456789s1234z
 fn discard_passes_the_turn_with_a_draw() {
     let mut game = game(PLAIN, "7z6z", "");
     game.apply(S[0], Action::Discard(tile("7z"))).unwrap();
-    assert_eq!(game.to_act(), [S[1]]);
+    assert_eq!(game.to_act(), seats(&[S[1]]));
     assert_eq!(game.last_draw(), Some(tile("6z")));
     assert_eq!(
         game.discards(),
@@ -93,14 +93,14 @@ fn rejects_out_of_turn_and_unheld_discards() {
     assert_eq!(game.apply(S[1], Action::Discard(tile("1p"))), Err(GameError::NotAsked(S[1])));
     let illegal = Action::Discard(tile("9s"));
     assert_eq!(game.apply(S[0], illegal), Err(GameError::Illegal { seat: S[0], action: illegal }));
-    assert_eq!(game.to_act(), [S[0]], "rejected actions change nothing");
+    assert_eq!(game.to_act(), seats(&[S[0]]), "rejected actions change nothing");
 }
 
 #[test]
 fn hand_ends_without_winner_when_live_wall_runs_out() {
-    let mut game = Game::new(family(), 3, S[0]);
+    let mut game = Game::new(family(), 3, S[0]).unwrap();
     let mut turns = 0;
-    while let Some(&seat) = game.to_act().first() {
+    while let Some(seat) = game.to_act().first() {
         if game.legal_actions(seat).contains(&Action::Pass) {
             game.apply(seat, Action::Pass).unwrap();
             continue;
@@ -128,7 +128,7 @@ fn contested() -> Game {
 #[test]
 fn claim_window_asks_only_seats_with_options() {
     let game = contested();
-    assert_eq!(game.to_act(), [S[1], S[2], S[3]]);
+    assert_eq!(game.to_act(), seats(&[S[1], S[2], S[3]]));
     assert_eq!(game.legal_actions(S[1]), [Action::Win, Action::Pass]);
     assert_eq!(game.legal_actions(S[2]), [Action::Pong, Action::Pass]);
     // seat 3 is not after the discarder, so 78s cannot chow
@@ -140,7 +140,7 @@ fn closest_winner_takes_the_discard() {
     let mut game = contested();
     game.apply(S[3], Action::Win).unwrap();
     game.apply(S[2], Action::Pong).unwrap();
-    assert_eq!(game.to_act(), [S[1]], "waits for every asked seat");
+    assert_eq!(game.to_act(), seats(&[S[1]]), "waits for every asked seat");
     game.apply(S[1], Action::Win).unwrap();
     let win = game.result().unwrap().win.unwrap();
     assert_eq!((win.winner, win.source), (S[1], WinSource::Discard(S[0])));
@@ -169,7 +169,7 @@ fn pong_takes_the_turn_without_a_draw() {
     assert!(game.legal_actions(S[2]).iter().all(|a| matches!(a, Action::Discard(_))));
     assert_eq!(game.public_tiles().to_string(), "999s");
     game.apply(S[2], Action::Discard(tile("5z"))).unwrap();
-    assert_eq!(game.to_act(), [S[3]], "play continues after the claimer");
+    assert_eq!(game.to_act(), seats(&[S[3]]), "play continues after the claimer");
 }
 
 #[test]
@@ -189,7 +189,7 @@ fn only_the_next_seat_may_chow_in_any_position() {
     game.apply(S[0], Action::Discard(tile("3p"))).unwrap();
     assert_eq!(game.legal_actions(S[1]), [Action::Chow(tile("2p")), Action::Pass]);
     assert_eq!(game.legal_actions(S[2]), [], "seat 2 holds 1p/3p but is not next");
-    assert_eq!(game.to_act(), [S[1]]);
+    assert_eq!(game.to_act(), seats(&[S[1]]));
     game.apply(S[1], Action::Chow(tile("2p"))).unwrap();
     assert_eq!(game.hand(S[1]).melds().collect::<Vec<_>>(), [Meld::Chow(tile("2p"))]);
     assert_eq!(game.public_tiles().to_string(), "234p");
@@ -198,7 +198,7 @@ fn only_the_next_seat_may_chow_in_any_position() {
 /// Passes every open claim window.
 fn pass_claims(game: &mut Game) {
     while let Phase::Claim { .. } = game.phase() {
-        let seat = game.to_act()[0];
+        let seat = game.to_act().first().unwrap();
         game.apply(seat, Action::Pass).unwrap();
     }
 }
@@ -281,7 +281,7 @@ fn kongs_are_paid_when_the_wall_runs_out() {
     let hands = ["1111m56789m1234z", "123456789p1234z", "123456789s1234z", "23456789m55667z"];
     let mut game = game(hands, "7z", "7p");
     game.apply(S[0], Action::ConcealedKong(tile("1m"))).unwrap();
-    while let Some(&seat) = game.to_act().first() {
+    while let Some(seat) = game.to_act().first() {
         let legal = game.legal_actions(seat);
         let action = if legal.contains(&Action::Pass) {
             Action::Pass
@@ -302,8 +302,8 @@ fn kongs_are_paid_when_the_wall_runs_out() {
 /// Plays a seeded hand with a fixed, simple policy: win when possible, pong
 /// and kong when offered, otherwise pass or discard the drawn tile.
 pub(crate) fn play_greedy(seed: u64) -> Game {
-    let mut game = Game::new(family(), seed, S[(seed % 4) as usize]);
-    while let Some(&seat) = game.to_act().first() {
+    let mut game = Game::new(family(), seed, S[(seed % 4) as usize]).unwrap();
+    while let Some(seat) = game.to_act().first() {
         let legal = game.legal_actions(seat);
         let preferred = [Action::Win, Action::SelfDrawWin, Action::Kong, Action::Pong];
         let action = preferred
@@ -359,7 +359,7 @@ fn events_tell_the_story() {
 fn upgrade_with_robber_waiting(rules: Ruleset) -> Game {
     let hands = ["123456789m1234z", "9m55p123789s1112z", "46p456s99m666777z", "12345678m33445z"];
     let wall = crate::testing::stacked(S[0], hands, "5p1s2s3s5p", "8p");
-    let mut game = Game::from_wall(Arc::new(rules), wall, S[0]);
+    let mut game = Game::from_wall(Arc::new(rules), wall, S[0]).unwrap();
     game.apply(S[0], Action::Discard(tile("5p"))).unwrap();
     game.apply(S[2], Action::Pass).unwrap();
     game.apply(S[1], Action::Pong).unwrap();
