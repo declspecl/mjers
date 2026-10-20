@@ -15,8 +15,8 @@ import msgspec
 import numpy as np
 import torch
 
-from mjers._native import Env, Observation
-from mjers.collect import collect_with, read_spec
+from mjers._native import Observation
+from mjers.collect import collect_with, make_env
 from mjers.data import save_dataset
 from mjers.model import DeviceName, TrainedPolicy, load_policy
 
@@ -62,7 +62,7 @@ class DaggerArguments(argparse.Namespace):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
-    parser.add_argument("--teacher", required=True, help="preset or BotSpec JSON file")
+    parser.add_argument("--teacher", required=True, help="preset, BotSpec JSON file, or neural strategy file")
     parser.add_argument("--rules", required=True, help="preset or Ruleset JSON file")
     parser.add_argument("--student", type=Path, required=True, help="policy checkpoint")
     parser.add_argument("--student-probability", type=float, required=True)
@@ -76,7 +76,7 @@ def main() -> None:
         parser.error("--hands and --threads must be positive")
     torch.set_num_threads(args.threads)
     student = load_policy(args.student, torch.device(args.device))
-    env = Env(teacher=read_spec(args.teacher), rules=read_spec(args.rules))
+    env = make_env(args.teacher, args.rules)
     if student.metadata.dataset.rules_json != env.rules_json:
         parser.error("the student was trained under different rules")
     behavior = MixedBehavior(student, args.student_probability, np.random.default_rng(args.seed))

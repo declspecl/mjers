@@ -213,6 +213,19 @@ impl Env {
         })
     }
 
+    /// Makes `net` the teacher (labels and field play) from the next `reset`.
+    /// `name` is recorded in `teacher_json`; pass the checkpoint path.
+    fn set_teacher_network(
+        &mut self,
+        name: &str,
+        net: &NeuralNet,
+    ) {
+        self.teacher = BotSpec::Neural {
+            name: name.into(),
+            network: NeuralNetwork::new(name, (*net.net).clone()),
+        };
+    }
+
     /// Logits (illegal actions at -inf) and predicted settlement units for the current observation.
     fn evaluate_network(
         &self,

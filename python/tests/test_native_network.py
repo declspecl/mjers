@@ -1,10 +1,14 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import torch
 
 from mjers._native import Env, NeuralNet
-from mjers.model import VALUE_SCALE, ResidualPolicyNet, native_network
+from mjers.collect import collect, make_env
+from mjers.model import VALUE_SCALE, PolicyMetadata, ResidualPolicyNet, TrainedPolicy, native_network, save_policy
 
 
 class NativeNetworkTests(unittest.TestCase):
@@ -48,3 +52,30 @@ class NativeNetworkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NeuralTeacherTests(unittest.TestCase):
+    def test_strategy_files_make_the_network_the_teacher(self) -> None:
+        torch.manual_seed(3)
+        network = ResidualPolicyNet(8)
+        with torch.no_grad():
+            for parameter in network.parameters():
+                parameter.add_(0.1 * torch.randn_like(parameter))
+        dataset = collect(Env("efficiency", rules="family"), range(0, 1))
+        policy = TrainedPolicy(network.eval(), PolicyMetadata("suit-resnet-v2", 8, dataset.metadata, (0,), (1,)), torch.device("cpu"))
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint = Path(directory) / "policy.safetensors"
+            save_policy(checkpoint, policy)
+            strategy = Path(directory) / "strategy.json"
+            strategy.write_text(json.dumps({"kind": "neural", "name": "net", "network": str(checkpoint)}))
+            env = make_env(str(strategy), "family")
+            self.assertIn(str(checkpoint), env.teacher_json)
+            native = native_network(network)
+            observation = env.reset(4, 0)
+            while observation is not None:
+                logits, _ = env.evaluate_network(native)
+                self.assertEqual(env.teacher_action(), int(np.argmax(logits)))
+                observation = env.step(env.teacher_action()).observation
+            with self.assertRaisesRegex(ValueError, "different rules"):
+                make_env(str(strategy), "discarder-pays")
+        self.assertIn('"efficiency"', make_env("efficiency", "family").teacher_json)

@@ -11,7 +11,7 @@ import msgspec
 import torch
 
 from mjers._native import Env, Observation
-from mjers.collect import read_spec
+from mjers.collect import make_env
 from mjers.model import DeviceName, TrainedPolicy, load_policy
 
 type DecisionScope = Literal["all", "turns", "claims"]
@@ -153,7 +153,7 @@ class EvaluateArguments(argparse.Namespace):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--baseline", required=True, help="preset or BotSpec JSON file")
+    parser.add_argument("--baseline", required=True, help="preset, BotSpec JSON file, or neural strategy file")
     parser.add_argument("--rules", required=True, help="preset or Ruleset JSON file")
     parser.add_argument("--start-seed", type=int, required=True)
     parser.add_argument("--hands", type=int, required=True, help="independent walls; candidate plays every seat")
@@ -166,7 +166,7 @@ def main() -> None:
         parser.error("--threads must be positive")
     torch.set_num_threads(args.threads)
     policy = load_policy(args.checkpoint, torch.device(args.device))
-    env = Env(teacher=read_spec(args.baseline), rules=read_spec(args.rules))
+    env = make_env(args.baseline, args.rules)
     result = compare(policy, env, range(args.start_seed, args.start_seed + args.hands), args.candidate_decisions)
     encoded = msgspec.json.encode(result)
     args.output.parent.mkdir(parents=True, exist_ok=True)

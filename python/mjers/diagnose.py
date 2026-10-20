@@ -15,7 +15,7 @@ import msgspec
 import torch
 
 from mjers._native import ACTION_COUNT, ActionAssessment, Env, Observation
-from mjers.collect import read_spec
+from mjers.collect import make_env
 from mjers.model import DeviceName, PolicyMetadata, load_policy
 
 type ActionKind = Literal["discard", "concealed_kong", "upgrade_kong", "chow", "pong", "kong", "win", "pass"]
@@ -231,7 +231,7 @@ class DiagnoseArguments(argparse.Namespace):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--teacher", required=True, help="preset or BotSpec JSON file")
+    parser.add_argument("--teacher", required=True, help="preset, BotSpec JSON file, or neural strategy file")
     parser.add_argument("--rules", required=True, help="preset or Ruleset JSON file")
     parser.add_argument("--examples-per-group", type=int, required=True)
     parser.add_argument("--device", choices=("cpu", "mps", "cuda"), required=True)
@@ -242,7 +242,7 @@ def main() -> None:
         parser.error("--threads must be positive")
     torch.set_num_threads(args.threads)
     policy = load_policy(args.checkpoint, torch.device(args.device))
-    env = Env(teacher=read_spec(args.teacher), rules=read_spec(args.rules))
+    env = make_env(args.teacher, args.rules)
     result = diagnose(policy, env, args.examples_per_group)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(msgspec.json.encode(result))
