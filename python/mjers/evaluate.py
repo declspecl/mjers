@@ -64,6 +64,10 @@ def paired_difference(first: Comparison, second: Comparison) -> PairedDifference
     return PairedDifference(first.seeds, mean(deltas), stdev(deltas) / math.sqrt(len(deltas)))
 
 
+def range_overlaps(a: range, b: range) -> bool:
+    return max(a.start, b.start) < min(a.stop, b.stop)
+
+
 def play_candidate(env: Env, seed: int, seat: int, policy: TrainedPolicy) -> list[int]:
     observation = env.reset(seed, seed % 4)
     while observation is not None:
@@ -91,7 +95,7 @@ def compare(policy: TrainedPolicy, env: Env, seeds: range) -> Comparison:
     if policy.metadata.dataset.rules_json != env.rules_json:
         raise ValueError("evaluation rules differ from the checkpoint's training rules")
     seen = set(policy.metadata.training_seeds) | set(policy.metadata.validation_seeds)
-    if seen.intersection(seeds):
+    if seen.intersection(seeds) or any(range_overlaps(stage.seeds(), seeds) for stage in policy.metadata.reinforcement):
         raise ValueError("evaluation hand seeds overlap training or validation")
     walls: list[WallResult] = []
     for seed in seeds:

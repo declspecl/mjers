@@ -179,12 +179,26 @@ def build_network(architecture: Architecture, hidden_width: int) -> PolicyNetwor
 
 
 @dataclass(frozen=True)
+class Reinforcement:
+    """One reinforcement stage: hands `start_seed..start_seed + hands` against `field_json`."""
+
+    field_json: str
+    start_seed: int
+    hands: int
+
+    def seeds(self) -> range:
+        return range(self.start_seed, self.start_seed + self.hands)
+
+
+@dataclass(frozen=True)
 class PolicyMetadata:
     architecture: Architecture
     hidden_width: int
     dataset: DatasetMetadata
     training_seeds: tuple[int, ...]
     validation_seeds: tuple[int, ...]
+    # Empty for imitation-only policies; the default keeps older checkpoints loadable.
+    reinforcement: tuple[Reinforcement, ...] = ()
 
 
 @dataclass(frozen=True)
