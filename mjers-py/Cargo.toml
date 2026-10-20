@@ -1,0 +1,22 @@
+[package]
+name = "mjers-py"
+description = "Python training environments for mjers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+# The extension is exercised by python/tests; it has no Rust test executable.
+test = false
+doctest = false
+
+[dependencies]
+mjers-core.workspace = true
+numpy = "0.30"
+pyo3 = "0.30"
+serde_json.workspace = true
+
+[lints]
+workspace = true
