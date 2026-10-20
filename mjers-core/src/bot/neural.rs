@@ -186,15 +186,37 @@ impl RankConvolution {
         output: &mut [f32],
     ) {
         let c = self.channels;
-        for tile in 0..SUITED_KINDS {
-            let rank = tile % RANKS;
-            let out = &mut output[tile * c..(tile + 1) * c];
+        for out in output[..SUITED_KINDS * c].chunks_exact_mut(c) {
             out.copy_from_slice(&self.bias);
-            for offset in 0..3 {
-                let Some(source) = (rank + offset).checked_sub(1).filter(|&r| r < RANKS) else { continue };
-                let neighbour = &input[(tile - rank + source) * c..(tile - rank + source + 1) * c];
-                for (value, row) in out.iter_mut().zip(self.weight[offset * c * c..(offset + 1) * c * c].chunks_exact(c)) {
-                    *value += dot(row, neighbour);
+        }
+        for offset in 0..3 {
+            let weights = &self.weight[offset * c * c..(offset + 1) * c * c];
+            // (tile, neighbour) pairs at this rank offset; suit edges have none.
+            let mut pairs = [(0, 0); SUITED_KINDS];
+            let mut count = 0;
+            for tile in 0..SUITED_KINDS {
+                let rank = tile % RANKS;
+                if let Some(source) = (rank + offset).checked_sub(1).filter(|&r| r < RANKS) {
+                    pairs[count] = (tile, tile - rank + source);
+                    count += 1;
+                }
+            }
+            // Four tiles share each weight row's loads.
+            for group in pairs[..count].chunks(4) {
+                if let &[a, b, d, e] = group {
+                    let sources = [a.1, b.1, d.1, e.1].map(|source| &input[source * c..(source + 1) * c]);
+                    for (o, row) in weights.chunks_exact(c).enumerate() {
+                        for (&tile, sum) in [a.0, b.0, d.0, e.0].iter().zip(dot4(row, sources)) {
+                            output[tile * c + o] += sum;
+                        }
+                    }
+                } else {
+                    for &(tile, source) in group {
+                        let neighbour = &input[source * c..(source + 1) * c];
+                        for (value, row) in output[tile * c..(tile + 1) * c].iter_mut().zip(weights.chunks_exact(c)) {
+                            *value += dot(row, neighbour);
+                        }
+                    }
                 }
             }
         }
@@ -489,6 +511,29 @@ fn dot(
     }
     let tail: f32 = a_tail.iter().zip(b_tail).map(|(x, y)| x * y).sum();
     sums.iter().sum::<f32>() + tail
+}
+
+/// `dot(row, x)` for four `x` at once, loading each part of `row` once.
+fn dot4(
+    row: &[f32],
+    inputs: [&[f32]; 4],
+) -> [f32; 4] {
+    const LANES: usize = 8;
+    let mut sums = [[0.0f32; LANES]; 4];
+    let (row_chunks, row_tail) = row.as_chunks::<LANES>();
+    let chunks = inputs.map(|input| input.as_chunks::<LANES>());
+    for (i, weights) in row_chunks.iter().enumerate() {
+        for (sum, (input, _)) in sums.iter_mut().zip(&chunks) {
+            for ((s, w), x) in sum.iter_mut().zip(weights).zip(&input[i]) {
+                *s += w * x;
+            }
+        }
+    }
+    let mut totals = [0.0; 4];
+    for ((total, sum), (_, tail)) in totals.iter_mut().zip(&sums).zip(&chunks) {
+        *total = sum.iter().sum::<f32>() + row_tail.iter().zip(*tail).map(|(w, x)| w * x).sum::<f32>();
+    }
+    totals
 }
 
 fn relu_into(
