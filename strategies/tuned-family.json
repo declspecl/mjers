@@ -4,7 +4,7 @@
   "params": {
     "chow": "when_improves",
     "pong": "when_improves",
-    "exposed_kong": "when_free",
+    "exposed_kong": "always",
     "concealed_kong": "always",
     "upgrade_kong": "always",
     "claim_max_shanten": 8,
