@@ -7,6 +7,7 @@ ENCODING_VERSION: int
 ACTION_COUNT: int
 TILE_PLANES: int
 CONTEXT_SIZE: int
+PASS_ACTION: int
 
 class Observation:
     @property

@@ -458,5 +458,6 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("ACTION_COUNT", encoding::ACTIONS)?;
     module.add("TILE_PLANES", encoding::PLANES)?;
     module.add("CONTEXT_SIZE", encoding::CONTEXT)?;
+    module.add("PASS_ACTION", encoding::PASS)?;
     Ok(())
 }

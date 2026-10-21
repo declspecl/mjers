@@ -28,6 +28,8 @@ pub const VERSION: u32 = 1;
 pub const ACTIONS: usize = 110;
 pub const PLANES: usize = 50;
 pub const CONTEXT: usize = 22;
+/// Legal only when responding to another seat's discard.
+pub const PASS: usize = 109;
 
 // Plane offsets; each count group uses four "at least n copies" planes.
 const OWN: usize = 0;
@@ -68,7 +70,7 @@ pub fn action_index(
         Action::Kong => 106,
         Action::Win => 107,
         Action::SelfDrawWin => 108,
-        Action::Pass => 109,
+        Action::Pass => PASS,
     })
 }
 

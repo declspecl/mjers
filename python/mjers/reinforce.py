@@ -25,7 +25,7 @@ from torch.autograd import backward
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from mjers._native import Arena, Env
+from mjers._native import PASS_ACTION, Arena, Env
 from mjers.collect import read_spec
 from mjers.evaluate import range_overlaps
 from mjers.model import VALUE_SCALE, DeviceName, Reinforcement, ResidualPolicyNet, TrainedPolicy, load_policy, native_network, save_policy
@@ -42,6 +42,8 @@ class ReinforcementConfig:
     clip: float
     value_weight: float
     entropy_weight: float
+    # Added to entropy_weight on claim responses, which imitation leaves nearly deterministic.
+    claim_entropy_weight: float
     gae_lambda: float
     seed: int
     start_seed: int
@@ -59,7 +61,7 @@ class ReinforcementConfig:
             raise ValueError("learning rate must be positive and finite")
         if not 0 < self.clip < 1 or not 0 <= self.gae_lambda <= 1:
             raise ValueError("clip must be in (0, 1) and GAE lambda in [0, 1]")
-        if min(self.value_weight, self.entropy_weight) < 0:
+        if min(self.value_weight, self.entropy_weight, self.claim_entropy_weight) < 0:
             raise ValueError("loss weights must be nonnegative")
         if self.snapshot_every < 0:
             raise ValueError("snapshot interval must be nonnegative")
@@ -250,8 +252,15 @@ def update(
             value_loss = F.smooth_l1_loss(values, batch.returns)
             # Masked log-probabilities are -inf; zero them first so 0 * -inf never reaches the gradient.
             legal_log_probs = log_probs.masked_fill(~batch.action_mask, 0.0)
-            entropy = -(legal_log_probs.exp() * batch.action_mask * legal_log_probs).sum(dim=1).mean()
-            loss = policy_loss + config.value_weight * value_loss - config.entropy_weight * entropy
+            entropies_by_row = -(legal_log_probs.exp() * batch.action_mask * legal_log_probs).sum(dim=1)
+            entropy = entropies_by_row.mean()
+            claim_entropy = (entropies_by_row * batch.action_mask[:, PASS_ACTION]).mean()
+            loss = (
+                policy_loss
+                + config.value_weight * value_loss
+                - config.entropy_weight * entropy
+                - config.claim_entropy_weight * claim_entropy
+            )
             if not torch.isfinite(loss):
                 raise ValueError("reinforcement produced a non-finite loss")
             optimizer.zero_grad(set_to_none=True)
@@ -341,6 +350,7 @@ class ReinforceArguments(argparse.Namespace):
     clip: float
     value_weight: float
     entropy_weight: float
+    claim_entropy_weight: float
     gae_lambda: float
     seed: int
     start_seed: int
@@ -365,6 +375,7 @@ def main() -> None:
     parser.add_argument("--clip", type=float, required=True)
     parser.add_argument("--value-weight", type=float, required=True)
     parser.add_argument("--entropy-weight", type=float, required=True)
+    parser.add_argument("--claim-entropy-weight", type=float, required=True, help="extra entropy weight on claim responses")
     parser.add_argument("--gae-lambda", type=float, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--start-seed", type=int, required=True, help="first hand seed; hands use a disjoint consecutive block")
@@ -390,6 +401,7 @@ def main() -> None:
         args.clip,
         args.value_weight,
         args.entropy_weight,
+        args.claim_entropy_weight,
         args.gae_lambda,
         args.seed,
         args.start_seed,
