@@ -17,6 +17,7 @@ from torch.optim import Adam, Optimizer
 from mjers.augment import random_relabeling, relabel_actions, relabel_mask, relabel_tiles
 from mjers.data import DecisionDataset, load_dataset, load_datasets
 from mjers.model import (
+    RESIDUAL_BLOCKS,
     VALUE_SCALE,
     Architecture,
     DeviceName,
@@ -178,7 +179,7 @@ def train(
     torch.set_num_threads(config.threads)
     manual_seed(config.seed)
     device = torch.device(config.device)
-    network = build_network(config.architecture, config.hidden_width).to(device)
+    network = build_network(config.architecture, config.hidden_width, RESIDUAL_BLOCKS).to(device)
     # Data stays in host memory; only batches visit the device.
     host = torch.device("cpu")
     training_batch = PolicyBatch.from_dataset(training, host)

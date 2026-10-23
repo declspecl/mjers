@@ -8,14 +8,14 @@ from torch.optim import Adam
 from mjers._native import ACTION_COUNT, CONTEXT_SIZE, TILE_PLANES, Env
 from mjers.augment import relabel_mask, relabel_tiles, relabeling
 from mjers.collect import collect
-from mjers.model import ResidualPolicyNet, load_policy, save_policy
+from mjers.model import RESIDUAL_BLOCKS, ResidualPolicyNet, load_policy, save_policy
 from mjers.train import EpochMetrics, PolicyBatch, TrainingConfig, TrainingResult, learn_batch, train
 
 
 class ResidualNetworkTests(unittest.TestCase):
     def test_tile_logits_follow_suit_and_honor_permutations(self) -> None:
         torch.manual_seed(5)
-        network = ResidualPolicyNet(16)
+        network = ResidualPolicyNet(16, RESIDUAL_BLOCKS)
         # Perturb the zero-initialized branches so every block contributes.
         with torch.no_grad():
             for parameter in network.parameters():
@@ -31,7 +31,7 @@ class ResidualNetworkTests(unittest.TestCase):
 
     def test_value_loss_trains_every_parameter(self) -> None:
         torch.manual_seed(9)
-        network = ResidualPolicyNet(16)
+        network = ResidualPolicyNet(16, RESIDUAL_BLOCKS)
         tiles = torch.rand(4, TILE_PLANES, 34)
         context = torch.rand(4, CONTEXT_SIZE)
         mask = torch.zeros(4, ACTION_COUNT, dtype=torch.bool)

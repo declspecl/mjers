@@ -134,13 +134,13 @@ class ResidualPolicyNet(nn.Module):
     head predicts the acting seat's settlement, scaled by `VALUE_SCALE`.
     """
 
-    def __init__(self, hidden_width: int) -> None:
+    def __init__(self, hidden_width: int, residual_blocks: int) -> None:
         super().__init__()
-        if hidden_width <= 0:
-            raise ValueError("hidden width must be positive")
+        if hidden_width <= 0 or residual_blocks <= 0:
+            raise ValueError("hidden width and residual blocks must be positive")
         self.hidden_width: int = hidden_width
         self.stem: nn.Conv1d = nn.Conv1d(TILE_PLANES + CONTEXT_SIZE, hidden_width, kernel_size=1)
-        self.blocks: nn.ModuleList = nn.ModuleList(TileBlock(hidden_width) for _ in range(RESIDUAL_BLOCKS))
+        self.blocks: nn.ModuleList = nn.ModuleList(TileBlock(hidden_width) for _ in range(residual_blocks))
         self.tile_actions: nn.Conv1d = nn.Conv1d(hidden_width, TILE_ACTIONS // 34, kernel_size=1)
         self.summary: nn.Linear = nn.Linear(3 * hidden_width + CONTEXT_SIZE, hidden_width)
         self.other_actions: nn.Linear = nn.Linear(hidden_width, ACTION_COUNT - TILE_ACTIONS)
@@ -175,12 +175,12 @@ def native_network(network: ResidualPolicyNet) -> NeuralNet:
 type PolicyNetwork = PolicyNet | SuitPolicyNet | ResidualPolicyNet
 
 
-def build_network(architecture: Architecture, hidden_width: int) -> PolicyNetwork:
+def build_network(architecture: Architecture, hidden_width: int, residual_blocks: int) -> PolicyNetwork:
     if architecture == "mlp-relu-v1":
         return PolicyNet(hidden_width)
     if architecture == "suit-cnn-relu-v1":
         return SuitPolicyNet(hidden_width)
-    return ResidualPolicyNet(hidden_width)
+    return ResidualPolicyNet(hidden_width, residual_blocks)
 
 
 @dataclass(frozen=True)
@@ -204,6 +204,8 @@ class PolicyMetadata:
     validation_seeds: tuple[int, ...]
     # Empty for imitation-only policies; the default keeps older checkpoints loadable.
     reinforcement: tuple[Reinforcement, ...] = ()
+    # suit-resnet-v2 depth; checkpoints from before `mjers.deepen` have six blocks.
+    residual_blocks: int = RESIDUAL_BLOCKS
 
 
 @dataclass(frozen=True)
@@ -243,7 +245,7 @@ def load_policy(path: Path, device: torch.device) -> TrainedPolicy:
         metadata = msgspec.json.decode(header["mjers"], type=PolicyMetadata)
     if metadata.dataset.encoding_version != ENCODING_VERSION:
         raise ValueError("checkpoint encoding is incompatible")
-    network = build_network(metadata.architecture, metadata.hidden_width).to(device)
+    network = build_network(metadata.architecture, metadata.hidden_width, metadata.residual_blocks).to(device)
     network.load_state_dict(load_file(path, device=str(device)), strict=True)
     network.eval()
     return TrainedPolicy(network, metadata, device)

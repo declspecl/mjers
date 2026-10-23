@@ -7,7 +7,7 @@ import torch
 from mjers._native import ACTION_COUNT, CONTEXT_SIZE, PASS_ACTION, TILE_PLANES, Env
 from mjers.collect import collect
 from mjers.evaluate import compare
-from mjers.model import PolicyMetadata, ResidualPolicyNet, TrainedPolicy
+from mjers.model import RESIDUAL_BLOCKS, PolicyMetadata, ResidualPolicyNet, TrainedPolicy
 from mjers.reinforce import Experience, IterationReport, ReinforcementConfig, advantages, reinforce, update
 
 
@@ -37,7 +37,7 @@ class ReinforcementTests(unittest.TestCase):
         torch.manual_seed(2)
         dataset = collect(Env("efficiency", rules="family"), range(0, 1))
         metadata = PolicyMetadata("suit-resnet-v2", 8, dataset.metadata, (0,), (1,))
-        return TrainedPolicy(ResidualPolicyNet(8).eval(), metadata, torch.device("cpu"))
+        return TrainedPolicy(ResidualPolicyNet(8, RESIDUAL_BLOCKS).eval(), metadata, torch.device("cpu"))
 
     def test_advantages_accumulate_the_terminal_reward(self) -> None:
         values = np.asarray([0.5, 0.25], dtype=np.float32)
@@ -79,7 +79,7 @@ class ReinforcementTests(unittest.TestCase):
 
     def test_claim_entropy_weight_opens_up_claim_responses(self) -> None:
         torch.manual_seed(3)
-        network = ResidualPolicyNet(8)
+        network = ResidualPolicyNet(8, RESIDUAL_BLOCKS)
         # Claim rows choose between pong and pass; the start strongly prefers passing.
         with torch.no_grad():
             network.other_actions.bias[PASS_ACTION - ACTION_COUNT] += 4.0
