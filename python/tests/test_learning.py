@@ -29,6 +29,7 @@ class LearningTests(unittest.TestCase):
             threads=1,
             augment="symmetry",
             value_weight=0.0,
+            soft_teacher=None,
         )
         epochs: list[EpochMetrics] = []
         best: list[TrainingResult] = []
@@ -71,7 +72,7 @@ class LearningTests(unittest.TestCase):
 
     def test_training_rejects_leaking_seeds_or_mixed_rules(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 2))
-        config = TrainingConfig("mlp-relu-v1", 32, 1, 32, 0.001, 0, "cpu", 1, "none", 0.0)
+        config = TrainingConfig("mlp-relu-v1", 32, 1, 32, 0.001, 0, "cpu", 1, "none", 0.0, None)
         epochs: list[EpochMetrics] = []
         best: list[TrainingResult] = []
         with self.assertRaisesRegex(ValueError, "overlap"):

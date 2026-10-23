@@ -1,9 +1,14 @@
-"""Train a masked policy by imitation on disjoint hand-seed datasets."""
+"""Train a masked policy by imitation on disjoint hand-seed datasets.
+
+With `--soft-teacher`, the policy instead learns a network teacher's full move
+probabilities on the dataset's positions (distillation), so close calls the
+argmax labels flatten keep their margins.
+"""
 
 import argparse
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -27,6 +32,7 @@ from mjers.model import (
     TrainedPolicy,
     build_network,
     hand_seeds,
+    load_policy,
     save_policy,
 )
 
@@ -45,6 +51,8 @@ class TrainingConfig:
     threads: int
     augment: Augmentation
     value_weight: float
+    # A policy checkpoint whose move probabilities replace the dataset's labels.
+    soft_teacher: str | None
 
     def __post_init__(self) -> None:
         if min(self.hidden_width, self.epochs, self.batch_size, self.threads) <= 0:
@@ -64,6 +72,8 @@ class PolicyBatch:
     action_mask: Tensor
     actions: Tensor
     returns: Tensor
+    # Move probabilities to learn instead of `actions` (distillation).
+    targets: Tensor | None = None
 
     @classmethod
     def from_dataset(cls, dataset: DecisionDataset, device: torch.device) -> "PolicyBatch":
@@ -75,20 +85,25 @@ class PolicyBatch:
             from_numpy(dataset.returns).to(device),
         )
 
-    def select(self, indices: Tensor) -> "PolicyBatch":
+    def map(self, function: Callable[[Tensor], Tensor]) -> "PolicyBatch":
+        targets = None if self.targets is None else function(self.targets)
         return PolicyBatch(
-            self.tiles[indices], self.context[indices], self.action_mask[indices], self.actions[indices], self.returns[indices]
+            function(self.tiles),
+            function(self.context),
+            function(self.action_mask),
+            function(self.actions),
+            function(self.returns),
+            targets,
         )
+
+    def select(self, indices: Tensor) -> "PolicyBatch":
+        return self.map(lambda tensor: tensor[indices])
 
     def rows(self, start: int, end: int) -> "PolicyBatch":
-        return PolicyBatch(
-            self.tiles[start:end], self.context[start:end], self.action_mask[start:end], self.actions[start:end], self.returns[start:end]
-        )
+        return self.map(lambda tensor: tensor[start:end])
 
     def to(self, device: torch.device) -> "PolicyBatch":
-        return PolicyBatch(
-            self.tiles.to(device), self.context.to(device), self.action_mask.to(device), self.actions.to(device), self.returns.to(device)
-        )
+        return self.map(lambda tensor: tensor.to(device))
 
     def relabeled(self, generator: torch.Generator) -> "PolicyBatch":
         """The same decisions under random tile symmetries (see `mjers.augment`)."""
@@ -99,7 +114,16 @@ class PolicyBatch:
             relabel_mask(self.action_mask, relabeling),
             relabel_actions(self.actions, relabeling),
             self.returns,
+            None if self.targets is None else relabel_mask(self.targets, relabeling),
         )
+
+    def policy_loss(self, logits: Tensor, reduction: Literal["mean", "sum"]) -> Tensor:
+        if self.targets is None:
+            return F.cross_entropy(logits, self.actions, reduction=reduction)
+        # Masked log-probabilities are -inf and their targets 0; zero them so 0 * -inf never appears.
+        log_probs = logits.log_softmax(dim=1).masked_fill(~self.action_mask, 0.0)
+        losses = -(self.targets * log_probs).sum(dim=1)
+        return losses.mean() if reduction == "mean" else losses.sum()
 
 
 @dataclass(frozen=True)
@@ -153,7 +177,7 @@ def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int, device: 
             logits, value = network.heads(chunk.tiles, chunk.context, mask)
             if value is not None:
                 value_loss += float(F.mse_loss(value, chunk.returns / VALUE_SCALE, reduction="sum").item())
-            loss += float(F.cross_entropy(logits, labels, reduction="sum").item())
+            loss += float(chunk.policy_loss(logits, "sum").item())
             matches = logits.argmax(dim=1) == labels
             choice = mask.sum(dim=1) > 1
             correct += int(matches.sum().item())
@@ -161,6 +185,17 @@ def measure(network: PolicyNetwork, data: PolicyBatch, batch_size: int, device: 
             choices += int(choice.sum().item())
             uniform_loss += float(mask.sum(dim=1).float().log().sum().item())
     return Metrics(loss / n, correct, n, choice_correct, choices, uniform_loss / n, value_loss / n if has_value else None)
+
+
+def probabilities(teacher: TrainedPolicy, data: PolicyBatch, batch_size: int, device: torch.device) -> Tensor:
+    """The teacher's move probabilities for every row of host-resident `data`, on the host."""
+    teacher.network.eval()
+    rows: list[Tensor] = []
+    with torch.inference_mode():
+        for start in range(0, len(data.actions), batch_size):
+            chunk = data.rows(start, start + batch_size).to(device)
+            rows.append(teacher.network.forward(chunk.tiles, chunk.context, chunk.action_mask).softmax(dim=1).cpu())
+    return torch.cat(rows)
 
 
 def train(
@@ -184,6 +219,24 @@ def train(
     host = torch.device("cpu")
     training_batch = PolicyBatch.from_dataset(training, host)
     validation_batch = PolicyBatch.from_dataset(validation, host)
+    metadata = PolicyMetadata(
+        config.architecture, config.hidden_width, training.metadata, hand_seeds(training.seeds), hand_seeds(validation.seeds)
+    )
+    if config.soft_teacher is not None:
+        teacher = load_policy(Path(config.soft_teacher), device)
+        if teacher.metadata.dataset.rules_json != training.metadata.rules_json:
+            raise ValueError("the soft teacher was trained under different rules")
+        training_batch = replace(training_batch, targets=probabilities(teacher, training_batch, config.batch_size, device))
+        validation_batch = replace(validation_batch, targets=probabilities(teacher, validation_batch, config.batch_size, device))
+        # The student learns from what the teacher trained on, so it inherits those seeds.
+        inherited = set(teacher.metadata.training_seeds)
+        if inherited & set(metadata.validation_seeds):
+            raise ValueError("validation hands overlap the soft teacher's training")
+        metadata = replace(
+            metadata,
+            training_seeds=tuple(sorted(inherited | set(metadata.training_seeds))),
+            reinforcement=teacher.metadata.reinforcement,
+        )
     optimizer = Adam(network.parameters(), lr=config.learning_rate)
     generator = torch.Generator(device="cpu").manual_seed(config.seed)
     # A separate stream keeps the shuffle order independent of augmentation.
@@ -197,9 +250,6 @@ def train(
     best_epoch = 0
     best_loss = initial.validation.loss
     best_weights = {name: tensor.detach().clone() for name, tensor in network.state_dict().items()}
-    metadata = PolicyMetadata(
-        config.architecture, config.hidden_width, training.metadata, hand_seeds(training.seeds), hand_seeds(validation.seeds)
-    )
     for epoch in range(1, config.epochs + 1):
         network.train(True)
         order = torch.randperm(len(training.actions), generator=generator, device="cpu")
@@ -230,7 +280,7 @@ def train(
 def learn_batch(network: PolicyNetwork, optimizer: Optimizer, batch: PolicyBatch, value_weight: float) -> None:
     optimizer.zero_grad(set_to_none=True)
     logits, value = network.heads(batch.tiles, batch.context, batch.action_mask)
-    loss = F.cross_entropy(logits, batch.actions)
+    loss = batch.policy_loss(logits, "mean")
     if value is not None and value_weight > 0:
         loss = loss + value_weight * F.smooth_l1_loss(value, batch.returns / VALUE_SCALE)
     if not torch.isfinite(loss):
@@ -253,6 +303,7 @@ class TrainArguments(argparse.Namespace):
     threads: int
     augment: Augmentation
     value_weight: float
+    soft_teacher: str
 
 
 def main() -> None:
@@ -272,6 +323,9 @@ def main() -> None:
         "--augment", choices=("none", "symmetry"), required=True, help="symmetry: random suit, rank-direction and honor relabelings"
     )
     parser.add_argument("--value-weight", type=float, required=True, help="settlement prediction loss weight; suit-resnet-v2 only")
+    parser.add_argument(
+        "--soft-teacher", required=True, help="policy checkpoint whose move probabilities to learn instead of the labels, or none"
+    )
     args = parser.parse_args(namespace=TrainArguments())
     config = TrainingConfig(
         args.architecture,
@@ -284,6 +338,7 @@ def main() -> None:
         args.threads,
         args.augment,
         args.value_weight,
+        None if args.soft_teacher == "none" else args.soft_teacher,
     )
 
     def save(result: TrainingResult) -> None:

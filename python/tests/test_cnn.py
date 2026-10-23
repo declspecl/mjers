@@ -65,7 +65,7 @@ class SuitNetworkTests(unittest.TestCase):
     def test_training_selects_and_restores_cnn_checkpoint(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 8))
         validation = collect(Env("efficiency", rules="family"), range(100, 104))
-        config = TrainingConfig("suit-cnn-relu-v1", 32, 4, 64, 0.003, 7, "cpu", 1, "none", 0.0)
+        config = TrainingConfig("suit-cnn-relu-v1", 32, 4, 64, 0.003, 7, "cpu", 1, "none", 0.0, None)
         epochs: list[EpochMetrics] = []
         best: list[TrainingResult] = []
         result = train(training, validation, config, epochs.append, best.append)

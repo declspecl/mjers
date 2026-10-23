@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 import torch
@@ -8,7 +9,7 @@ from torch.optim import Adam
 from mjers._native import ACTION_COUNT, CONTEXT_SIZE, TILE_PLANES, Env
 from mjers.augment import relabel_mask, relabel_tiles, relabeling
 from mjers.collect import collect
-from mjers.model import RESIDUAL_BLOCKS, ResidualPolicyNet, load_policy, save_policy
+from mjers.model import RESIDUAL_BLOCKS, PolicyMetadata, Reinforcement, ResidualPolicyNet, TrainedPolicy, load_policy, save_policy
 from mjers.train import EpochMetrics, PolicyBatch, TrainingConfig, TrainingResult, learn_batch, train
 
 
@@ -51,7 +52,7 @@ class ResidualNetworkTests(unittest.TestCase):
     def test_training_reports_value_loss_and_restores_checkpoint(self) -> None:
         training = collect(Env("efficiency", rules="family"), range(0, 8))
         validation = collect(Env("efficiency", rules="family"), range(100, 104))
-        config = TrainingConfig("suit-resnet-v2", 16, 3, 64, 0.003, 7, "cpu", 1, "symmetry", 0.5)
+        config = TrainingConfig("suit-resnet-v2", 16, 3, 64, 0.003, 7, "cpu", 1, "symmetry", 0.5, None)
         epochs: list[EpochMetrics] = []
         best: list[TrainingResult] = []
         result = train(training, validation, config, epochs.append, best.append)
@@ -69,11 +70,49 @@ class ResidualNetworkTests(unittest.TestCase):
             actual = restored.network.forward(batch.tiles, batch.context, batch.action_mask)
             torch.testing.assert_close(expected, actual, rtol=0, atol=0)
 
+    def test_soft_targets_with_one_hot_rows_match_label_cross_entropy(self) -> None:
+        torch.manual_seed(4)
+        mask = torch.zeros(3, ACTION_COUNT, dtype=torch.bool)
+        mask[:, [0, 5, 109]] = True
+        logits = torch.randn(3, ACTION_COUNT).masked_fill(~mask, -torch.inf)
+        actions = torch.tensor([0, 5, 109])
+        hard = PolicyBatch(torch.zeros(3, TILE_PLANES, 34), torch.zeros(3, CONTEXT_SIZE), mask, actions, torch.zeros(3))
+        soft = PolicyBatch(
+            hard.tiles, hard.context, mask, actions, hard.returns, torch.nn.functional.one_hot(actions, ACTION_COUNT).float()
+        )
+        torch.testing.assert_close(soft.policy_loss(logits, "sum"), hard.policy_loss(logits, "sum"))
+
+    def test_distillation_learns_the_teacher_and_inherits_its_seeds(self) -> None:
+        training = collect(Env("efficiency", rules="family"), range(0, 6))
+        validation = collect(Env("efficiency", rules="family"), range(100, 103))
+        torch.manual_seed(1)
+        teacher_network = ResidualPolicyNet(8, RESIDUAL_BLOCKS)
+        with torch.no_grad():
+            for parameter in teacher_network.parameters():
+                parameter.add_(0.2 * torch.randn_like(parameter))
+        stage = Reinforcement("{}", 500, 10)
+        teacher_metadata = PolicyMetadata("suit-resnet-v2", 8, training.metadata, (40, 41), (42,), (stage,))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "teacher.safetensors"
+            save_policy(path, TrainedPolicy(teacher_network.eval(), teacher_metadata, torch.device("cpu")))
+            config = TrainingConfig("suit-resnet-v2", 16, 3, 64, 0.003, 7, "cpu", 1, "symmetry", 0.5, str(path))
+            epochs: list[EpochMetrics] = []
+            result = train(training, validation, config, epochs.append, lambda _: None)
+            metadata = result.policy.metadata
+            self.assertEqual(metadata.training_seeds, (0, 1, 2, 3, 4, 5, 40, 41))
+            self.assertEqual(metadata.validation_seeds, (100, 101, 102))
+            self.assertEqual(metadata.reinforcement, (stage,))
+            self.assertLess(epochs[-1].validation.loss, epochs[0].validation.loss)
+            overlapping = replace(teacher_metadata, training_seeds=(101,))
+            save_policy(path, TrainedPolicy(teacher_network.eval(), overlapping, torch.device("cpu")))
+            with self.assertRaisesRegex(ValueError, "overlap the soft teacher"):
+                train(training, validation, config, lambda _: None, lambda _: None)
+
     def test_value_weight_requires_a_value_head(self) -> None:
         with self.assertRaisesRegex(ValueError, "value head"):
-            TrainingConfig("suit-cnn-relu-v1", 16, 1, 64, 0.003, 7, "cpu", 1, "none", 0.5)
+            TrainingConfig("suit-cnn-relu-v1", 16, 1, 64, 0.003, 7, "cpu", 1, "none", 0.5, None)
         with self.assertRaisesRegex(ValueError, "nonnegative"):
-            TrainingConfig("suit-resnet-v2", 16, 1, 64, 0.003, 7, "cpu", 1, "none", -1.0)
+            TrainingConfig("suit-resnet-v2", 16, 1, 64, 0.003, 7, "cpu", 1, "none", -1.0, None)
 
 
 if __name__ == "__main__":
