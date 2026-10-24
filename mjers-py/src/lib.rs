@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use mjers_core::advisor::heuristic;
+use mjers_core::advisor::{
+    heuristic,
+    montecarlo,
+};
 use mjers_core::bot::encoding::{
     self,
     EncodedObservation,
@@ -225,6 +228,33 @@ impl Env {
             name: name.into(),
             network: NeuralNetwork::new(name, (*net.net).clone()),
         };
+    }
+
+    /// Paired playout estimates for `candidates` (action indices) at the current
+    /// decision: each candidate's mean units minus the first's, and its
+    /// standard error, over the same `samples` deals resampled from the
+    /// acting seat's view. `net` plays that seat afterwards; the teacher plays
+    /// the others.
+    #[pyo3(signature = (net, candidates, *, samples, seed))]
+    fn estimate_actions(
+        &self,
+        net: &NeuralNet,
+        candidates: Vec<usize>,
+        samples: u32,
+        seed: u64,
+    ) -> PyResult<Vec<(f64, f64)>> {
+        let seat = self.current_seat()?;
+        let observation = self.game.observe(seat);
+        let actions = candidates
+            .iter()
+            .map(|&index| encoding::legal_action(&observation, index).ok_or_else(|| PyValueError::new_err("candidate is not legal at this decision")))
+            .collect::<PyResult<Vec<Action>>>()?;
+        let own = BotSpec::Neural {
+            name: "student".into(),
+            network: NeuralNetwork::new("student", (*net.net).clone()),
+        };
+        let estimates = montecarlo::estimate(&observation, &actions, samples, seed, &own, &self.teacher);
+        Ok(estimates.iter().map(|e| (e.difference, e.difference_stderr)).collect())
     }
 
     /// Logits (illegal actions at -inf) and predicted settlement units for the current observation.
