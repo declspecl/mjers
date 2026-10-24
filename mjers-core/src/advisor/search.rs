@@ -11,7 +11,10 @@ use serde::{
     Serialize,
 };
 
-use crate::advisor::montecarlo::estimate;
+use crate::advisor::montecarlo::{
+    Estimate,
+    estimate,
+};
 use crate::bot::encoding;
 use crate::bot::neural::NeuralNetwork;
 use crate::bot::policy::Policy;
@@ -61,6 +64,54 @@ impl SearchBot {
     }
 }
 
+/// The network's legal choices, most likely first, and playout estimates for its
+/// leading candidates (favourite first) when the decision was searched.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Search {
+    pub choices: Vec<(Action, f32)>,
+    pub estimates: Vec<Estimate>,
+}
+
+impl Search {
+    /// The favourite, unless a candidate leads it by more than `margin`
+    /// standard errors of the paired difference.
+    pub fn best(
+        &self,
+        margin: f64,
+    ) -> Option<Action> {
+        let favourite = self.choices.first()?.0;
+        let lead = self
+            .estimates
+            .iter()
+            .filter(|e| e.difference > 0.0 && e.difference > margin * e.difference_stderr)
+            .max_by(|a, b| a.difference.total_cmp(&b.difference));
+        Some(lead.map_or(favourite, |e| e.action))
+    }
+}
+
+/// Evaluates `network` at `observation` and plays out its candidates unless
+/// the favourite is a win or at least `config.confident` likely.
+pub fn search(
+    network: &NeuralNetwork,
+    observation: &Observation<'_>,
+    config: &SearchConfig,
+    seed: u64,
+) -> Search {
+    let choices = network.net().evaluate(&encoding::encode(observation)).choices(observation);
+    let wins = observation.legal_actions().iter().any(|action| matches!(action, Action::Win | Action::SelfDrawWin));
+    let sure = choices.first().is_none_or(|&(_, probability)| probability >= config.confident);
+    if wins || sure || choices.len() < 2 || config.candidates < 2 {
+        return Search { choices, estimates: Vec::new() };
+    }
+    let candidates: Vec<Action> = choices.iter().take(config.candidates).map(|&(action, _)| action).collect();
+    let own = BotSpec::Neural {
+        name: network.checkpoint().into(),
+        network: network.clone(),
+    };
+    let estimates = estimate(observation, &candidates, config.samples, seed, &own, &config.field);
+    Search { choices, estimates }
+}
+
 impl Policy for SearchBot {
     fn name(&self) -> &str {
         &self.name
@@ -71,27 +122,10 @@ impl Policy for SearchBot {
         observation: &Observation<'_>,
         legal: &[Action],
     ) -> Action {
-        let fallback = legal.first().copied().unwrap_or(Action::Pass);
-        let choices = self.network.net().evaluate(&encoding::encode(observation)).choices(observation);
-        let Some(&(favourite, probability)) = choices.first() else {
-            return fallback;
-        };
-        let wins = legal.iter().any(|action| matches!(action, Action::Win | Action::SelfDrawWin));
-        if wins || probability >= self.config.confident || choices.len() < 2 || self.config.candidates < 2 {
-            return favourite;
-        }
-        let candidates: Vec<Action> = choices.iter().take(self.config.candidates).map(|&(action, _)| action).collect();
-        let own = BotSpec::Neural {
-            name: self.name.clone(),
-            network: self.network.clone(),
-        };
-        let seed = derive_seed(self.seed, self.decisions);
-        self.decisions += 1;
-        estimate(observation, &candidates, self.config.samples, seed, &own, &self.config.field)
-            .into_iter()
-            .filter(|e| e.difference > 0.0 && e.difference > self.config.margin * e.difference_stderr)
-            .max_by(|a, b| a.difference.total_cmp(&b.difference))
-            .map_or(favourite, |e| e.action)
+        let result = search(&self.network, observation, &self.config, derive_seed(self.seed, self.decisions));
+        // Only searched decisions use up a seed.
+        self.decisions += u64::from(!result.estimates.is_empty());
+        result.best(self.config.margin).or_else(|| legal.first().copied()).unwrap_or(Action::Pass)
     }
 }
 

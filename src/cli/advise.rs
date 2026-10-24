@@ -4,6 +4,10 @@ use anyhow::{
     Context,
     bail,
 };
+use mjers_core::advisor::search::{
+    SearchConfig,
+    search,
+};
 use mjers_core::advisor::{
     Advice,
     AdviceConfig,
@@ -43,7 +47,8 @@ pub struct Args {
     samples: u32,
     #[arg(long, default_value_t = 6)]
     candidates: usize,
-    /// Also show a neural strategy's choices and predicted settlement (text output).
+    /// Also show a neural strategy's choices and predicted settlement, and a
+    /// search strategy's playouts of them (text output).
     #[arg(long)]
     network: Option<String>,
     #[arg(long)]
@@ -74,10 +79,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     say!("{seat} holds {}; {} live draws left", obs.hand(), obs.live_wall())?;
     print_advice(&advice, usize::MAX)?;
     if let Some(name) = &args.network {
-        let BotSpec::Neural { network, .. } = load::strategy(name)? else {
-            bail!("--network needs a neural strategy file");
-        };
-        print_network(&network, &obs)?;
+        print_network(&NetworkHint::load(name, "--network")?, &obs, args.seed)?;
     }
     Ok(())
 }
@@ -130,12 +132,44 @@ pub fn print_advice(
     Ok(())
 }
 
-/// A network's three most likely legal actions and predicted settlement.
+/// A network to show beside the advisor; a search strategy also plays out its candidates.
+pub struct NetworkHint {
+    network: NeuralNetwork,
+    search: Option<SearchConfig>,
+}
+
+impl NetworkHint {
+    pub fn load(
+        name: &str,
+        option: &str,
+    ) -> anyhow::Result<NetworkHint> {
+        match load::strategy(name)? {
+            BotSpec::Neural { network, .. } => Ok(NetworkHint { network, search: None }),
+            BotSpec::Search { network, search, .. } => Ok(NetworkHint { network, search: Some(*search) }),
+            _ => bail!("{option} needs a neural or search strategy file"),
+        }
+    }
+}
+
+/// A network's three most likely legal actions and predicted settlement, then
+/// the playouts and choice of a search, where it searched.
 pub fn print_network(
-    network: &NeuralNetwork,
+    hint: &NetworkHint,
     observation: &Observation<'_>,
+    seed: u64,
 ) -> std::io::Result<()> {
-    let evaluation = network.net().evaluate(&encoding::encode(observation));
+    let evaluation = hint.network.net().evaluate(&encoding::encode(observation));
     let top: Vec<String> = evaluation.choices(observation).iter().take(3).map(|(action, p)| format!("{action} {:.0}%", 100.0 * p)).collect();
-    say!("network: {} (expects {:+.1} units)", top.join(", "), evaluation.settlement)
+    say!("network: {} (expects {:+.1} units)", top.join(", "), evaluation.settlement)?;
+    let Some(config) = &hint.search else {
+        return Ok(());
+    };
+    let result = search(&hint.network, observation, config, seed);
+    for e in result.estimates.iter().skip(1) {
+        say!("  playouts: {} {:+.2} ± {:.2} vs the network's choice", e.action, e.difference, e.difference_stderr)?;
+    }
+    match result.best(config.margin) {
+        Some(best) if !result.estimates.is_empty() => say!("network search: {best}"),
+        _ => Ok(()),
+    }
 }

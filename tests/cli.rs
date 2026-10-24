@@ -256,6 +256,10 @@ fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
     assert!(out.contains("net-search vs efficiency"), "{out}");
     let seen = mj(&["compare", search, "efficiency", "--hands", "4", "--seed", "0"], "");
     assert!(!seen.status.success() && String::from_utf8_lossy(&seen.stderr).contains("overlap"), "search networks are checked");
+    let searched = stdout(&mj(&["advise", "--seed", "100", "--step", "3", "--samples", "0", "--network", search], ""));
+    assert!(searched.contains("playouts: ") && searched.contains("network search: "), "{searched}");
+    let hinted = mj(&["play", "--seed", "7", "--hint-network", search], "");
+    assert!(String::from_utf8_lossy(&hinted.stdout).contains("network search: "), "play shows search hints");
     let hinted = mj(&["play", "--seed", "7", "--hint-network", path], "");
     assert!(String::from_utf8_lossy(&hinted.stdout).contains("network: "), "play shows network hints");
     let advised = stdout(&mj(&["advise", "--seed", "100", "--step", "3", "--samples", "0", "--network", path], ""));
