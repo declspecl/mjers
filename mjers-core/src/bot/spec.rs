@@ -7,6 +7,10 @@ use serde::{
 
 use crate::advisor::AdviceConfig;
 use crate::advisor::policy::AdvisorBot;
+use crate::advisor::search::{
+    SearchBot,
+    SearchConfig,
+};
 use crate::bot::heuristic::HeuristicBot;
 use crate::bot::neural::{
     NeuralBot,
@@ -42,6 +46,12 @@ pub enum BotSpec {
         name: String,
         network: NeuralNetwork,
     },
+    /// A network's move, checked by playouts where the network is unsure.
+    Search {
+        name: String,
+        network: NeuralNetwork,
+        search: Box<SearchConfig>,
+    },
     /// Turn decisions from `turns`, claim responses from `claims`.
     Hybrid {
         name: String,
@@ -70,7 +80,9 @@ impl BotSpec {
 
     pub fn name(&self) -> &str {
         match self {
-            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } | BotSpec::Neural { name, .. } | BotSpec::Hybrid { name, .. } => name,
+            BotSpec::Random { name } | BotSpec::Heuristic { name, .. } | BotSpec::Advisor { name, .. } | BotSpec::Neural { name, .. } | BotSpec::Search { name, .. } | BotSpec::Hybrid { name, .. } => {
+                name
+            },
         }
     }
 
@@ -84,6 +96,7 @@ impl BotSpec {
             BotSpec::Heuristic { name, params } => Box::new(HeuristicBot::new(name.clone(), params.clone())),
             BotSpec::Advisor { name, advice } => Box::new(AdvisorBot::new(name.clone(), (**advice).clone(), seed)),
             BotSpec::Neural { name, network } => Box::new(NeuralBot::new(name.clone(), network.net().clone())),
+            BotSpec::Search { name, network, search } => Box::new(SearchBot::new(name.clone(), network.clone(), (**search).clone(), seed)),
             BotSpec::Hybrid { name, turns, claims } => Box::new(HybridBot::new(name.clone(), turns.build(derive_seed(seed, 0)), claims.build(derive_seed(seed, 1)))),
         }
     }

@@ -3,6 +3,7 @@
 pub mod heuristic;
 pub mod montecarlo;
 pub mod policy;
+pub mod search;
 
 use serde::{
     Deserialize,
@@ -82,7 +83,7 @@ pub fn advise(
     let ranked = rank(obs);
     let candidates: Vec<Action> = ranked.iter().take(config.candidates.max(1)).map(|a| a.action).collect();
     let mut estimates = if config.samples > 0 && ranked.len() > 1 {
-        estimate(obs, &candidates, config.samples, config.seed, &config.rollout)
+        estimate(obs, &candidates, config.samples, config.seed, &config.rollout, &config.rollout)
     } else {
         Vec::new()
     };

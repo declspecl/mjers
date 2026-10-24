@@ -33,7 +33,7 @@ fn bench(c: &mut Criterion) {
     let candidates: Vec<_> = rank(&obs).into_iter().take(3).map(|a| a.action).collect();
     let rollout = BotSpec::preset("efficiency").unwrap();
     c.bench_function("rank", |b| b.iter(|| black_box(rank(&obs))));
-    c.bench_function("estimate_3x20", |b| b.iter(|| black_box(estimate(&obs, &candidates, 20, 0, &rollout))));
+    c.bench_function("estimate_3x20", |b| b.iter(|| black_box(estimate(&obs, &candidates, 20, 0, &rollout, &rollout))));
 }
 
 criterion_group!(benches, bench);

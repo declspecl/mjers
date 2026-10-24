@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use anyhow::Context;
+use mjers_core::advisor::search::SearchConfig;
 use mjers_core::bot::neural::NeuralNetwork;
 use mjers_core::bot::spec::BotSpec;
 use mjers_core::rules::Ruleset;
@@ -31,6 +32,22 @@ pub fn strategy(name_or_path: &str) -> anyhow::Result<BotSpec> {
             network: NeuralNetwork::new(network, net),
         });
     }
+    if value.get("kind").and_then(serde_json::Value::as_str) == Some("search") {
+        let SearchFile::Search { name, network, search } = SearchFile::deserialize(&value).with_context(|| format!("parsing {name_or_path}"))?;
+        let net = checkpoint::read(&network)?;
+        return Ok(BotSpec::Search {
+            name,
+            network: NeuralNetwork::new(network, net),
+            search: Box::new(SearchConfig {
+                samples: search.samples,
+                candidates: search.candidates,
+                confident: search.confident,
+                margin: search.margin,
+                seed: search.seed,
+                field: strategy(&search.field)?,
+            }),
+        });
+    }
     let names_parts = value.get("turns").is_some_and(serde_json::Value::is_string) || value.get("claims").is_some_and(serde_json::Value::is_string);
     if value.get("kind").and_then(serde_json::Value::as_str) == Some("hybrid") && names_parts {
         let HybridFile::Hybrid { name, turns, claims } = HybridFile::deserialize(&value).with_context(|| format!("parsing {name_or_path}"))?;
@@ -48,6 +65,25 @@ pub fn strategy(name_or_path: &str) -> anyhow::Result<BotSpec> {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum NeuralFile {
     Neural { name: String, network: String },
+}
+
+/// `{"kind": "search", "name": ..., "network": "<checkpoint path>", "search": {...}}`,
+/// where the search's playout `field` names a strategy by preset or file.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+enum SearchFile {
+    Search { name: String, network: String, search: SearchFileConfig },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SearchFileConfig {
+    samples: u32,
+    candidates: usize,
+    confident: f32,
+    margin: f64,
+    seed: u64,
+    field: String,
 }
 
 /// `{"kind": "hybrid", "name": ..., "turns": "<strategy>", "claims": "<strategy>"}`,
@@ -70,6 +106,12 @@ pub fn check_unseen(
             checkpoint::read_metadata(network.checkpoint())?
                 .check_unseen(rules, seeds)
                 .with_context(|| format!("strategy {name}"))?;
+        },
+        BotSpec::Search { name, network, search } => {
+            checkpoint::read_metadata(network.checkpoint())?
+                .check_unseen(rules, seeds)
+                .with_context(|| format!("strategy {name}"))?;
+            check_unseen(&search.field, rules, seeds)?;
         },
         BotSpec::Hybrid { turns, claims, .. } => {
             check_unseen(turns, rules, seeds)?;

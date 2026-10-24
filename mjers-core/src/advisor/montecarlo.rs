@@ -2,8 +2,9 @@
 //!
 //! Hidden information (opponents' concealed tiles and the wall order) is
 //! resampled consistently with what the seat can see, each candidate action is
-//! applied, and bots play the hand out. Every candidate sees the same samples,
-//! so differences between them are not luck of the sample.
+//! applied, and bots play the hand out: `own` in the advised seat, `field` in
+//! the others. Every candidate sees the same samples, so differences between
+//! them are not luck of the sample.
 
 use std::sync::Arc;
 
@@ -128,7 +129,8 @@ pub fn estimate(
     actions: &[Action],
     samples: u32,
     seed: u64,
-    rollout: &BotSpec,
+    own: &BotSpec,
+    field: &BotSpec,
 ) -> Vec<Estimate> {
     let seat = obs.seat();
     let rules = Arc::new(obs.rules().clone());
@@ -139,7 +141,7 @@ pub fn estimate(
         };
         let played: Option<Vec<Outcome>> = actions
             .iter()
-            .map(|&action| play_from(&rules, &position, seat, action, rollout, derive_seed(seed ^ 0x5EED, i)))
+            .map(|&action| play_from(&rules, &position, seat, action, [own, field], derive_seed(seed ^ 0x5EED, i)))
             .collect();
         if let Some(played) = played {
             for (outcomes, outcome) in outcomes_by_action.iter_mut().zip(played) {
@@ -182,12 +184,12 @@ fn play_from(
     position: &Position,
     seat: Seat,
     action: Action,
-    rollout: &BotSpec,
+    [own, field]: [&BotSpec; 2],
     seed: u64,
 ) -> Option<Outcome> {
     let mut game = Game::resume(rules.clone(), position.clone()).ok()?;
     game.apply(seat, action).ok()?;
-    let mut policies = std::array::from_fn(|k| rollout.build(derive_seed(seed, k as u64)));
+    let mut policies = std::array::from_fn(|k| if k == seat.index() { own } else { field }.build(derive_seed(seed, k as u64)));
     play_out(&mut game, &mut policies).ok()?;
     let units = game.settlement()?.total()[seat.index()] as f64;
     let win = game.result()?.win;
@@ -252,8 +254,8 @@ mod tests {
         let obs = game.observe(seat);
         let actions = obs.legal_actions();
         let rollout = BotSpec::preset("efficiency").unwrap();
-        let a = estimate(&obs, &actions, 20, 1, &rollout);
-        let b = estimate(&obs, &actions, 20, 1, &rollout);
+        let a = estimate(&obs, &actions, 20, 1, &rollout, &rollout);
+        let b = estimate(&obs, &actions, 20, 1, &rollout, &rollout);
         assert_eq!(a, b);
         assert_eq!(a.len(), actions.len());
         assert!(a.iter().all(|e| e.samples == 20 && e.ev_stderr >= 0.0));

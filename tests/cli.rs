@@ -244,6 +244,18 @@ fn neural_strategies_play_only_on_unseen_seeds_and_rules() {
     assert!(out.contains("net-turns vs efficiency"), "{out}");
     let nested = mj(&["compare", hybrid, "efficiency", "--hands", "4", "--seed", "0"], "");
     assert!(!nested.status.success() && String::from_utf8_lossy(&nested.stderr).contains("overlap"), "hybrid parts are checked");
+    let search = dir.join("search.json");
+    let config = serde_json::json!({"samples": 2, "candidates": 2, "confident": 0.99, "margin": 1.0, "seed": 0, "field": "efficiency"});
+    std::fs::write(
+        &search,
+        serde_json::json!({"kind": "search", "name": "net-search", "network": checkpoint, "search": config}).to_string(),
+    )
+    .unwrap();
+    let search = search.to_str().unwrap();
+    let out = stdout(&mj(&["compare", search, "efficiency", "--hands", "2", "--seed", "100"], ""));
+    assert!(out.contains("net-search vs efficiency"), "{out}");
+    let seen = mj(&["compare", search, "efficiency", "--hands", "4", "--seed", "0"], "");
+    assert!(!seen.status.success() && String::from_utf8_lossy(&seen.stderr).contains("overlap"), "search networks are checked");
     let hinted = mj(&["play", "--seed", "7", "--hint-network", path], "");
     assert!(String::from_utf8_lossy(&hinted.stdout).contains("network: "), "play shows network hints");
     let advised = stdout(&mj(&["advise", "--seed", "100", "--step", "3", "--samples", "0", "--network", path], ""));

@@ -9,7 +9,7 @@ use crate::rules::Ruleset;
 use crate::rules::seat::Seat;
 
 /// Every tensor of a `width`, `blocks` state dict, filled with small pseudo-random values.
-fn random_weights(
+pub(crate) fn random_weights(
     width: usize,
     blocks: usize,
     seed: u64,

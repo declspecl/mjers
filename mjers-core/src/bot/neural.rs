@@ -6,7 +6,7 @@
 //! so each tile's channels are contiguous for the matrix products.
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::collections::BTreeMap;
 use std::fmt;
