@@ -139,3 +139,44 @@ fn networks_serialize_as_their_checkpoint_and_need_weights_to_load() {
     let error = serde_json::from_str::<BotSpec>(&json).unwrap_err().to_string();
     assert!(error.contains("checkpoint weights"), "{error}");
 }
+
+#[test]
+fn tile_convolutions_match_the_pytorch_layout() {
+    // Width 20 covers a full output run and a remainder.
+    let c = 20;
+    let weights = random_weights(c, 1, 6);
+    let mut used = Vec::new();
+    let ranks = TileConvolution::ranks(&weights, &mut used, "blocks.0.suit_first", c).unwrap();
+    let honors = TileConvolution::honors(&weights, &mut used, "blocks.0.honor_first", c).unwrap();
+    let mut rng = Rng::seed(7);
+    let input: Vec<f32> = (0..KINDS * c).map(|_| rng.below(2001) as f32 / 1000.0 - 1.0).collect();
+    let mut output = vec![f32::NAN; KINDS * c];
+    ranks.apply(&input, &mut output);
+    honors.apply(&input, &mut output);
+
+    let suit = &weights.tensors["blocks.0.suit_first.weight"].data;
+    let suit_bias = &weights.tensors["blocks.0.suit_first.bias"].data;
+    let honor = &weights.tensors["blocks.0.honor_first.weight"].data;
+    let honor_bias = &weights.tensors["blocks.0.honor_first.bias"].data;
+    for tile in 0..KINDS {
+        for o in 0..c {
+            let mut expected = 0.0;
+            if tile < SUITED_KINDS {
+                expected += suit_bias[o];
+                let rank = tile % RANKS;
+                for offset in 0..3 {
+                    let Some(source) = (rank + offset).checked_sub(1).filter(|&r| r < RANKS) else {
+                        continue;
+                    };
+                    for i in 0..c {
+                        expected += suit[(o * c + i) * 3 + offset] * input[(tile - rank + source) * c + i];
+                    }
+                }
+            } else {
+                expected += honor_bias[o] + (0..c).map(|i| honor[o * c + i] * input[tile * c + i]).sum::<f32>();
+            }
+            let actual = output[tile * c + o];
+            assert!((actual - expected).abs() < 1e-4, "tile {tile} output {o}: {actual} vs {expected}");
+        }
+    }
+}

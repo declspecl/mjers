@@ -3,13 +3,14 @@
 //!
 //! Callers parse checkpoint files and supply named tensors in PyTorch's
 //! `state_dict` layout. Activations are stored tile-major (`[tile][channel]`)
-//! so every convolution is a run of contiguous dot products.
+//! so each tile's channels are contiguous for the matrix products.
 
 #[cfg(test)]
 mod tests;
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::ops::Range;
 use std::sync::Arc;
 
 use serde::{
@@ -149,86 +150,153 @@ impl Dense {
     }
 }
 
-/// A `(1, 3)` convolution along the ranks of each suit, zero-padded.
+/// A convolution over tile-major features: each tap adds `weight · input[source]`
+/// to `output[tile]` for its `(tile, source)` pairs.
 #[derive(Debug, Clone)]
-struct RankConvolution {
+struct TileConvolution {
     channels: usize,
-    /// `[offset][output][input]` for rank offsets −1, 0, +1.
-    weight: Vec<f32>,
+    /// Output tiles, which start at the bias.
+    tiles: Range<usize>,
+    taps: Vec<Tap>,
     bias: Vec<f32>,
 }
 
-impl RankConvolution {
-    fn load(
+#[derive(Debug, Clone)]
+struct Tap {
+    /// `[input][output]`, so a run of outputs shares each input's load.
+    weight: Vec<f32>,
+    pairs: Vec<(usize, usize)>,
+}
+
+impl TileConvolution {
+    /// A `(1, 3)` convolution along the ranks of each suit, zero-padded.
+    fn ranks(
         weights: &Weights,
         used: &mut Vec<String>,
         prefix: &str,
         channels: usize,
-    ) -> Result<RankConvolution, WeightError> {
+    ) -> Result<TileConvolution, WeightError> {
         let torch = weights.get(&format!("{prefix}.weight"), &[channels, channels, 1, 3])?;
         let bias = weights.get(&format!("{prefix}.bias"), &[channels])?.to_vec();
         used.extend([format!("{prefix}.weight"), format!("{prefix}.bias")]);
-        let mut weight = vec![0.0; 3 * channels * channels];
-        for output in 0..channels {
-            for input in 0..channels {
-                for offset in 0..3 {
-                    weight[(offset * channels + output) * channels + input] = torch[(output * channels + input) * 3 + offset];
+        let taps = (0..3)
+            .map(|offset| {
+                let mut weight = vec![0.0; channels * channels];
+                for output in 0..channels {
+                    for input in 0..channels {
+                        weight[input * channels + output] = torch[(output * channels + input) * 3 + offset];
+                    }
                 }
-            }
-        }
-        Ok(RankConvolution { channels, weight, bias })
+                // Neighbours at rank offset −1, 0 or +1; suit edges have none.
+                let pairs = (0..SUITED_KINDS)
+                    .filter_map(|tile| {
+                        let rank = tile % RANKS;
+                        (rank + offset).checked_sub(1).filter(|&r| r < RANKS).map(|source| (tile, tile - rank + source))
+                    })
+                    .collect();
+                Tap { weight, pairs }
+            })
+            .collect();
+        Ok(TileConvolution {
+            channels,
+            tiles: 0..SUITED_KINDS,
+            taps,
+            bias,
+        })
     }
 
-    /// `input` and `output` hold the 27 suited tiles, tile-major.
+    /// A pointwise convolution applied to each honor tile.
+    fn honors(
+        weights: &Weights,
+        used: &mut Vec<String>,
+        prefix: &str,
+        channels: usize,
+    ) -> Result<TileConvolution, WeightError> {
+        let dense = Dense::load(weights, used, prefix, channels, channels, true)?;
+        let mut weight = vec![0.0; channels * channels];
+        for (output, row) in dense.weight.chunks_exact(channels).enumerate() {
+            for (input, &value) in row.iter().enumerate() {
+                weight[input * channels + output] = value;
+            }
+        }
+        let pairs = (SUITED_KINDS..KINDS).map(|tile| (tile, tile)).collect();
+        Ok(TileConvolution {
+            channels,
+            tiles: SUITED_KINDS..KINDS,
+            taps: vec![Tap { weight, pairs }],
+            bias: dense.bias,
+        })
+    }
+
     fn apply(
         &self,
         input: &[f32],
         output: &mut [f32],
     ) {
         let c = self.channels;
-        for out in output[..SUITED_KINDS * c].chunks_exact_mut(c) {
+        for out in output[self.tiles.start * c..self.tiles.end * c].chunks_exact_mut(c) {
             out.copy_from_slice(&self.bias);
         }
-        for offset in 0..3 {
-            let weights = &self.weight[offset * c * c..(offset + 1) * c * c];
-            // (tile, neighbour) pairs at this rank offset; suit edges have none.
-            let mut pairs = [(0, 0); SUITED_KINDS];
-            let mut count = 0;
-            for tile in 0..SUITED_KINDS {
-                let rank = tile % RANKS;
-                if let Some(source) = (rank + offset).checked_sub(1).filter(|&r| r < RANKS) {
-                    pairs[count] = (tile, tile - rank + source);
-                    count += 1;
+        for tap in &self.taps {
+            let (groups, rest) = tap.pairs.as_chunks::<TILE_GROUP>();
+            for &pair in rest {
+                accumulate(&tap.weight, c, input, output, [pair]);
+            }
+            for &group in groups {
+                accumulate(&tap.weight, c, input, output, group);
+            }
+        }
+    }
+}
+
+const TILE_GROUP: usize = 4;
+const OUTPUT_RUN: usize = 16;
+
+/// `output[tile] += weight · input[source]` for `N` pairs at once. Sums for
+/// `N` tiles × [`OUTPUT_RUN`] outputs stay in registers while every input
+/// channel adds one broadcast product per sum.
+fn accumulate<const N: usize>(
+    weight: &[f32],
+    channels: usize,
+    input: &[f32],
+    output: &mut [f32],
+    pairs: [(usize, usize); N],
+) {
+    let sources = pairs.map(|(_, source)| &input[source * channels..(source + 1) * channels]);
+    let mut start = 0;
+    while start + OUTPUT_RUN <= channels {
+        let mut sums = [[0.0f32; OUTPUT_RUN]; N];
+        for (i, row) in weight.chunks_exact(channels).enumerate() {
+            let Some(run) = row[start..].first_chunk::<OUTPUT_RUN>() else {
+                break;
+            };
+            for (sum, source) in sums.iter_mut().zip(&sources) {
+                let x = source[i];
+                for (s, w) in sum.iter_mut().zip(run) {
+                    *s += w * x;
                 }
             }
-            // Four tiles share each weight row's loads.
-            for group in pairs[..count].chunks(4) {
-                if let &[a, b, d, e] = group {
-                    let sources = [a.1, b.1, d.1, e.1].map(|source| &input[source * c..(source + 1) * c]);
-                    for (o, row) in weights.chunks_exact(c).enumerate() {
-                        for (&tile, sum) in [a.0, b.0, d.0, e.0].iter().zip(dot4(row, sources)) {
-                            output[tile * c + o] += sum;
-                        }
-                    }
-                } else {
-                    for &(tile, source) in group {
-                        let neighbour = &input[source * c..(source + 1) * c];
-                        for (value, row) in output[tile * c..(tile + 1) * c].iter_mut().zip(weights.chunks_exact(c)) {
-                            *value += dot(row, neighbour);
-                        }
-                    }
-                }
+        }
+        for (sum, &(tile, _)) in sums.iter().zip(&pairs) {
+            for (out, s) in output[tile * channels + start..].iter_mut().zip(sum) {
+                *out += s;
             }
+        }
+        start += OUTPUT_RUN;
+    }
+    for o in start..channels {
+        for (source, &(tile, _)) in sources.iter().zip(&pairs) {
+            output[tile * channels + o] += weight.chunks_exact(channels).zip(*source).map(|(row, x)| row[o] * x).sum::<f32>();
         }
     }
 }
 
 #[derive(Debug, Clone)]
 struct Block {
-    suit_first: RankConvolution,
-    suit_second: RankConvolution,
-    honor_first: Dense,
-    honor_second: Dense,
+    suit_first: TileConvolution,
+    suit_second: TileConvolution,
+    honor_first: TileConvolution,
+    honor_second: TileConvolution,
     pooled: Dense,
 }
 
@@ -239,24 +307,19 @@ impl Block {
         scratch: &mut Scratch,
     ) {
         let c = self.pooled.outputs;
-        let suited = SUITED_KINDS * c;
         relu_into(features, &mut scratch.active);
         pool(&scratch.active, c, &mut scratch.pooled);
         let mut bias = vec![0.0; c];
         self.pooled.apply(&scratch.pooled, &mut bias);
-        self.suit_first.apply(&scratch.active[..suited], &mut scratch.hidden[..suited]);
-        for tile in SUITED_KINDS..KINDS {
-            self.honor_first.apply(&scratch.active[tile * c..(tile + 1) * c], &mut scratch.hidden[tile * c..(tile + 1) * c]);
-        }
+        self.suit_first.apply(&scratch.active, &mut scratch.hidden);
+        self.honor_first.apply(&scratch.active, &mut scratch.hidden);
         for row in scratch.hidden.chunks_exact_mut(c) {
             for (value, b) in row.iter_mut().zip(&bias) {
                 *value = (*value + b).max(0.0);
             }
         }
-        self.suit_second.apply(&scratch.hidden[..suited], &mut scratch.active[..suited]);
-        for tile in SUITED_KINDS..KINDS {
-            self.honor_second.apply(&scratch.hidden[tile * c..(tile + 1) * c], &mut scratch.active[tile * c..(tile + 1) * c]);
-        }
+        self.suit_second.apply(&scratch.hidden, &mut scratch.active);
+        self.honor_second.apply(&scratch.hidden, &mut scratch.active);
         for (value, residual) in features.iter_mut().zip(&scratch.active) {
             *value += residual;
         }
@@ -328,10 +391,10 @@ impl ResidualNet {
         while weights.tensors.contains_key(&format!("blocks.{}.pooled.weight", blocks.len())) {
             let prefix = format!("blocks.{}", blocks.len());
             blocks.push(Block {
-                suit_first: RankConvolution::load(weights, &mut used, &format!("{prefix}.suit_first"), width)?,
-                suit_second: RankConvolution::load(weights, &mut used, &format!("{prefix}.suit_second"), width)?,
-                honor_first: Dense::load(weights, &mut used, &format!("{prefix}.honor_first"), width, width, true)?,
-                honor_second: Dense::load(weights, &mut used, &format!("{prefix}.honor_second"), width, width, true)?,
+                suit_first: TileConvolution::ranks(weights, &mut used, &format!("{prefix}.suit_first"), width)?,
+                suit_second: TileConvolution::ranks(weights, &mut used, &format!("{prefix}.suit_second"), width)?,
+                honor_first: TileConvolution::honors(weights, &mut used, &format!("{prefix}.honor_first"), width)?,
+                honor_second: TileConvolution::honors(weights, &mut used, &format!("{prefix}.honor_second"), width)?,
                 pooled: Dense::load(weights, &mut used, &format!("{prefix}.pooled"), 2 * width, width, false)?,
             });
         }
@@ -511,29 +574,6 @@ fn dot(
     }
     let tail: f32 = a_tail.iter().zip(b_tail).map(|(x, y)| x * y).sum();
     sums.iter().sum::<f32>() + tail
-}
-
-/// `dot(row, x)` for four `x` at once, loading each part of `row` once.
-fn dot4(
-    row: &[f32],
-    inputs: [&[f32]; 4],
-) -> [f32; 4] {
-    const LANES: usize = 8;
-    let mut sums = [[0.0f32; LANES]; 4];
-    let (row_chunks, row_tail) = row.as_chunks::<LANES>();
-    let chunks = inputs.map(|input| input.as_chunks::<LANES>());
-    for (i, weights) in row_chunks.iter().enumerate() {
-        for (sum, (input, _)) in sums.iter_mut().zip(&chunks) {
-            for ((s, w), x) in sum.iter_mut().zip(weights).zip(&input[i]) {
-                *s += w * x;
-            }
-        }
-    }
-    let mut totals = [0.0; 4];
-    for ((total, sum), (_, tail)) in totals.iter_mut().zip(&sums).zip(&chunks) {
-        *total = sum.iter().sum::<f32>() + row_tail.iter().zip(*tail).map(|(w, x)| w * x).sum::<f32>();
-    }
-    totals
 }
 
 fn relu_into(
