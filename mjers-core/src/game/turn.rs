@@ -94,7 +94,12 @@ impl Game {
         tile: Tile,
     ) -> Result<(), GameError> {
         self.hand_by_seat[seat.index()].discard(tile)?;
-        self.discards.push(Discard { seat, tile, claimed: false });
+        self.discards.push(Discard {
+            seat,
+            tile,
+            claimed: false,
+            drawn: self.last_draw == Some(tile),
+        });
         self.events.push(Event::Discard { seat, tile });
         self.public.add(tile);
         self.open_claims(tile, seat, Offer::Discard)

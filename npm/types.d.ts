@@ -48,6 +48,8 @@ export interface Discard {
     seat: Seat;
     tile: Tile;
     claimed: boolean;
+    /** The tile kind the seat had just drawn (never after a claim). */
+    drawn: boolean;
 }
 export type Decision =
     | { kind: "turn"; after_claim: boolean; drawn: Tile | null }

@@ -61,6 +61,9 @@ pub struct Discard {
     pub tile: Tile,
     /// Taken by another player for a meld or a win.
     pub claimed: bool,
+    /// The tile kind the seat had just drawn (never after a claim).
+    #[serde(default)]
+    pub drawn: bool,
 }
 
 #[derive(Debug, Clone)]

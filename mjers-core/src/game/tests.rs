@@ -80,10 +80,13 @@ fn discard_passes_the_turn_with_a_draw() {
         [Discard {
             seat: S[0],
             tile: tile("7z"),
-            claimed: false
+            claimed: false,
+            drawn: true
         }]
     );
     assert_eq!(game.public_tiles().to_string(), "7z");
+    game.apply(S[1], Action::Discard(tile("1p"))).unwrap();
+    assert!(!game.discards()[1].drawn, "a tile from the hand, not the draw");
 }
 
 #[test]
@@ -168,6 +171,7 @@ fn pong_takes_the_turn_without_a_draw() {
     assert!(game.legal_actions(S[2]).iter().all(|a| matches!(a, Action::Discard(_))));
     assert_eq!(game.public_tiles().to_string(), "999s");
     game.apply(S[2], Action::Discard(tile("5z"))).unwrap();
+    assert!(!game.discards().last().unwrap().drawn, "claims take the turn without a draw");
     assert_eq!(game.to_act(), seats(&[S[3]]), "play continues after the claimer");
 }
 
