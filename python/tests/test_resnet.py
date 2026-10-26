@@ -16,7 +16,7 @@ from mjers.train import EpochMetrics, PolicyBatch, TrainingConfig, TrainingResul
 class ResidualNetworkTests(unittest.TestCase):
     def test_tile_logits_follow_suit_and_honor_permutations(self) -> None:
         torch.manual_seed(5)
-        network = ResidualPolicyNet(16, RESIDUAL_BLOCKS)
+        network = ResidualPolicyNet(16, RESIDUAL_BLOCKS, TILE_PLANES)
         # Perturb the zero-initialized branches so every block contributes.
         with torch.no_grad():
             for parameter in network.parameters():
@@ -32,7 +32,7 @@ class ResidualNetworkTests(unittest.TestCase):
 
     def test_value_loss_trains_every_parameter(self) -> None:
         torch.manual_seed(9)
-        network = ResidualPolicyNet(16, RESIDUAL_BLOCKS)
+        network = ResidualPolicyNet(16, RESIDUAL_BLOCKS, TILE_PLANES)
         tiles = torch.rand(4, TILE_PLANES, 34)
         context = torch.rand(4, CONTEXT_SIZE)
         mask = torch.zeros(4, ACTION_COUNT, dtype=torch.bool)
@@ -86,7 +86,7 @@ class ResidualNetworkTests(unittest.TestCase):
         training = collect(Env("efficiency", rules="family"), range(0, 6))
         validation = collect(Env("efficiency", rules="family"), range(100, 103))
         torch.manual_seed(1)
-        teacher_network = ResidualPolicyNet(8, RESIDUAL_BLOCKS)
+        teacher_network = ResidualPolicyNet(8, RESIDUAL_BLOCKS, TILE_PLANES)
         with torch.no_grad():
             for parameter in teacher_network.parameters():
                 parameter.add_(0.2 * torch.randn_like(parameter))

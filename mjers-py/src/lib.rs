@@ -487,6 +487,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("ENCODING_VERSION", encoding::VERSION)?;
     module.add("ACTION_COUNT", encoding::ACTIONS)?;
     module.add("TILE_PLANES", encoding::PLANES)?;
+    module.add("V1_TILE_PLANES", encoding::V1_PLANES)?;
     module.add("CONTEXT_SIZE", encoding::CONTEXT)?;
     module.add("PASS_ACTION", encoding::PASS)?;
     Ok(())

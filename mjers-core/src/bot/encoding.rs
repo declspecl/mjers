@@ -3,7 +3,8 @@
 //! Only an `Observation` enters the encoder. Seats are relative to its owner:
 //! self, next, opposite, previous. Version 1 describes board state across the
 //! engine's rule variants, summarizing discard history rather than retaining
-//! the full sequence. Rules are external model configuration, not inputs;
+//! the full sequence. Version 2 appends planes and leaves version 1's
+//! unchanged, so version 1 networks read its first [`V1_PLANES`] planes. Rules are external model configuration, not inputs;
 //! train and evaluate a model under its recorded ruleset.
 
 #[cfg(test)]
@@ -24,9 +25,10 @@ use crate::hand::meld::{
 use crate::tile::KINDS;
 use crate::tile::counts::TileCounts;
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const ACTIONS: usize = 110;
-pub const PLANES: usize = 50;
+pub const PLANES: usize = 58;
+pub const V1_PLANES: usize = 50;
 pub const CONTEXT: usize = 22;
 /// Legal only when responding to another seat's discard.
 pub const PASS: usize = 109;
@@ -40,6 +42,19 @@ const RECENCY: usize = 28;
 const MELDS: usize = 32;
 const OFFERED: usize = 48;
 const DRAWN: usize = 49;
+const EARLY: usize = 50;
+const DRAWN_DISCARDS: usize = 54;
+/// Each seat's first discards, which show what it gave up while shaping its hand.
+const EARLY_DISCARDS: usize = 6;
+
+/// How many planes a network trained under `version` reads, if this encoder supports it.
+pub fn planes(version: u32) -> Option<usize> {
+    match version {
+        1 => Some(V1_PLANES),
+        VERSION => Some(PLANES),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EncodedObservation {
@@ -97,8 +112,12 @@ pub fn encode(observation: &Observation<'_>) -> EncodedObservation {
     for (i, discard) in observation.discards().iter().enumerate() {
         let relative = discard.seat.turns_after(owner) as usize;
         let tile = discard.tile.index();
+        if discards_by_seat[relative].len() < EARLY_DISCARDS {
+            encoded.tiles[EARLY + relative][tile] += 0.25;
+        }
         discards_by_seat[relative].add(discard.tile);
         encoded.tiles[CLAIMED + relative][tile] += f32::from(discard.claimed) / 4.0;
+        encoded.tiles[DRAWN_DISCARDS + relative][tile] += f32::from(discard.drawn) / 4.0;
         // Last occurrence per seat and tile: later discards approach 1.
         encoded.tiles[RECENCY + relative][tile] = (i + 1) as f32 / history_len;
     }

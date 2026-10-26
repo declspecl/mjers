@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from mjers._native import Env
+from mjers._native import TILE_PLANES, Env
 from mjers.collect import collect
 from mjers.expert import (
     CollectionConfig,
@@ -26,7 +26,7 @@ from mjers.model import RESIDUAL_BLOCKS, PolicyMetadata, ResidualPolicyNet, Trai
 
 def student() -> TrainedPolicy:
     torch.manual_seed(5)
-    network = ResidualPolicyNet(8, RESIDUAL_BLOCKS)
+    network = ResidualPolicyNet(8, RESIDUAL_BLOCKS, TILE_PLANES)
     with torch.no_grad():
         for parameter in network.parameters():
             parameter.add_(0.05 * torch.randn_like(parameter))

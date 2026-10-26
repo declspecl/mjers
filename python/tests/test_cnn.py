@@ -89,11 +89,12 @@ class SuitNetworkTests(unittest.TestCase):
             assert observation is not None
             self.assertTrue(observation.action_mask[restored.act(observation)])
 
-    def test_parameter_budget_matches_mlp_and_width_is_required_positive(self) -> None:
+    def test_parameter_budgets_and_width_is_required_positive(self) -> None:
         mlp_count = sum(parameter.numel() for parameter in PolicyNet(256).parameters())
         cnn_count = sum(parameter.numel() for parameter in SuitPolicyNet(256).parameters())
-        self.assertEqual(mlp_count, 535150)
-        self.assertEqual(cnn_count, 536750)
+        # Under encoding v1 both had about 536,000; v2's planes widen the MLP's input layer most.
+        self.assertEqual(mlp_count, 604782)
+        self.assertEqual(cnn_count, 538286)
         for width in (0, -1):
             with self.subTest(width=width), self.assertRaisesRegex(ValueError, "positive"):
                 SuitPolicyNet(width)

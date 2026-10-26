@@ -62,6 +62,12 @@ impl Network {
         })
     }
 
+    /// Leading observation planes the network reads; see `encodingPlanes`.
+    #[wasm_bindgen(getter)]
+    pub fn planes(&self) -> u32 {
+        self.net.planes() as u32
+    }
+
     /// The network's probability for each legal action and its predicted settlement.
     pub fn evaluate(
         &self,
@@ -101,8 +107,14 @@ impl Bot {
     }
 }
 
-/// The observation encoding networks must have been trained with.
+/// The current observation encoding.
 #[wasm_bindgen(js_name = encodingVersion)]
 pub fn encoding_version() -> u32 {
     encoding::VERSION
+}
+
+/// How many planes a network trained under `version` reads, if supported.
+#[wasm_bindgen(js_name = encodingPlanes)]
+pub fn encoding_planes(version: u32) -> Option<u32> {
+    encoding::planes(version).map(|planes| planes as u32)
 }

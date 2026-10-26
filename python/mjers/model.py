@@ -14,7 +14,7 @@ from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 from torch import Tensor, from_numpy, nn
 
-from mjers._native import ACTION_COUNT, CONTEXT_SIZE, ENCODING_VERSION, TILE_PLANES, NeuralNet, Observation
+from mjers._native import ACTION_COUNT, CONTEXT_SIZE, ENCODING_VERSION, TILE_PLANES, V1_TILE_PLANES, NeuralNet, Observation
 from mjers.data import DatasetMetadata
 
 type DeviceName = Literal["cpu", "mps", "cuda"]
@@ -134,12 +134,16 @@ class ResidualPolicyNet(nn.Module):
     head predicts the acting seat's settlement, scaled by `VALUE_SCALE`.
     """
 
-    def __init__(self, hidden_width: int, residual_blocks: int) -> None:
+    def __init__(self, hidden_width: int, residual_blocks: int, planes: int) -> None:
         super().__init__()
         if hidden_width <= 0 or residual_blocks <= 0:
             raise ValueError("hidden width and residual blocks must be positive")
+        if planes not in (V1_TILE_PLANES, TILE_PLANES):
+            raise ValueError("residual networks read version 1 or current observation planes")
         self.hidden_width: int = hidden_width
-        self.stem: nn.Conv1d = nn.Conv1d(TILE_PLANES + CONTEXT_SIZE, hidden_width, kernel_size=1)
+        # Leading observation planes read; later encodings only append planes.
+        self.planes: int = planes
+        self.stem: nn.Conv1d = nn.Conv1d(planes + CONTEXT_SIZE, hidden_width, kernel_size=1)
         self.blocks: nn.ModuleList = nn.ModuleList(TileBlock(hidden_width) for _ in range(residual_blocks))
         self.tile_actions: nn.Conv1d = nn.Conv1d(hidden_width, TILE_ACTIONS // 34, kernel_size=1)
         self.summary: nn.Linear = nn.Linear(3 * hidden_width + CONTEXT_SIZE, hidden_width)
@@ -147,6 +151,7 @@ class ResidualPolicyNet(nn.Module):
         self.value_layer: nn.Linear = nn.Linear(hidden_width, 1)
 
     def heads(self, tiles: Tensor, context: Tensor, action_mask: Tensor) -> tuple[Tensor, Tensor]:
+        tiles = tiles[:, : self.planes]
         batch_size = tiles.shape[0]
         broadcast = context.unsqueeze(2).expand(-1, -1, tiles.shape[2])
         features = self.stem.forward(torch.cat((tiles, broadcast), dim=1))
@@ -175,12 +180,20 @@ def native_network(network: ResidualPolicyNet) -> NeuralNet:
 type PolicyNetwork = PolicyNet | SuitPolicyNet | ResidualPolicyNet
 
 
-def build_network(architecture: Architecture, hidden_width: int, residual_blocks: int) -> PolicyNetwork:
-    if architecture == "mlp-relu-v1":
-        return PolicyNet(hidden_width)
-    if architecture == "suit-cnn-relu-v1":
-        return SuitPolicyNet(hidden_width)
-    return ResidualPolicyNet(hidden_width, residual_blocks)
+def input_planes(encoding_version: int) -> int:
+    """Observation planes a network trained under `encoding_version` reads."""
+    planes = {1: V1_TILE_PLANES, ENCODING_VERSION: TILE_PLANES}.get(encoding_version)
+    if planes is None:
+        raise ValueError("checkpoint encoding is incompatible")
+    return planes
+
+
+def build_network(architecture: Architecture, hidden_width: int, residual_blocks: int, planes: int) -> PolicyNetwork:
+    if architecture == "suit-resnet-v2":
+        return ResidualPolicyNet(hidden_width, residual_blocks, planes)
+    if planes != TILE_PLANES:
+        raise ValueError(f"{architecture} networks read only current observations")
+    return PolicyNet(hidden_width) if architecture == "mlp-relu-v1" else SuitPolicyNet(hidden_width)
 
 
 @dataclass(frozen=True)
@@ -243,9 +256,8 @@ def load_policy(path: Path, device: torch.device) -> TrainedPolicy:
         if header is None or "mjers" not in header:
             raise ValueError("checkpoint is missing mjers metadata")
         metadata = msgspec.json.decode(header["mjers"], type=PolicyMetadata)
-    if metadata.dataset.encoding_version != ENCODING_VERSION:
-        raise ValueError("checkpoint encoding is incompatible")
-    network = build_network(metadata.architecture, metadata.hidden_width, metadata.residual_blocks).to(device)
+    planes = input_planes(metadata.dataset.encoding_version)
+    network = build_network(metadata.architecture, metadata.hidden_width, metadata.residual_blocks, planes).to(device)
     network.load_state_dict(load_file(path, device=str(device)), strict=True)
     network.eval()
     return TrainedPolicy(network, metadata, device)

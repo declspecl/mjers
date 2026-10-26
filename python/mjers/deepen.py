@@ -21,7 +21,7 @@ def deepen(policy: TrainedPolicy, residual_blocks: int) -> TrainedPolicy:
         raise ValueError("only suit-resnet-v2 policies have residual blocks")
     if residual_blocks <= len(network.blocks):
         raise ValueError("the deeper network needs more blocks than the original")
-    deeper = ResidualPolicyNet(network.hidden_width, residual_blocks).to(policy.device)
+    deeper = ResidualPolicyNet(network.hidden_width, residual_blocks, network.planes).to(policy.device)
     missing, unexpected = deeper.load_state_dict(network.state_dict(), strict=False)
     new_block = tuple(f"blocks.{index}." for index in range(len(network.blocks), residual_blocks))
     if unexpected or not all(name.startswith(new_block) for name in missing):

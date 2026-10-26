@@ -23,7 +23,7 @@ from mjers.model import (
 class DeepenTests(unittest.TestCase):
     def policy(self) -> TrainedPolicy:
         torch.manual_seed(6)
-        network = ResidualPolicyNet(8, RESIDUAL_BLOCKS)
+        network = ResidualPolicyNet(8, RESIDUAL_BLOCKS, TILE_PLANES)
         # Perturb the zero-initialized branches so the original blocks all matter.
         with torch.no_grad():
             for parameter in network.parameters():

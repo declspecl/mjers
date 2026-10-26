@@ -71,11 +71,8 @@ pub fn read(path: &str) -> anyhow::Result<ResidualNet> {
     let (header, data) = split(&bytes).with_context(|| format!("{path} is not a safetensors file"))?;
     let metadata = metadata(&header).with_context(|| format!("reading {path} metadata"))?;
     ensure!(metadata.architecture == ARCHITECTURE, "{path} is a {} network; only {ARCHITECTURE} runs in Rust", metadata.architecture);
-    ensure!(
-        metadata.dataset.encoding_version == encoding::VERSION,
-        "{path} uses observation encoding {}",
-        metadata.dataset.encoding_version
-    );
+    let version = metadata.dataset.encoding_version;
+    let planes = encoding::planes(version).with_context(|| format!("{path} uses observation encoding {version}"))?;
     let mut weights = Weights::new();
     for (name, info) in &header {
         if name == "__metadata__" {
@@ -99,7 +96,9 @@ pub fn read(path: &str) -> anyhow::Result<ResidualNet> {
         let values = values.iter().map(|&b| f32::from_le_bytes(b)).collect();
         weights.insert(name.clone(), shape, values)?;
     }
-    ResidualNet::new(&weights).with_context(|| format!("loading {path}"))
+    let net = ResidualNet::new(&weights).with_context(|| format!("loading {path}"))?;
+    ensure!(net.planes() == planes, "{path}'s stem does not read encoding {version} observations");
+    Ok(net)
 }
 
 /// The JSON header and the tensor bytes after it.

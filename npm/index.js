@@ -41,8 +41,11 @@ function loadNetwork(bindings, source) {
         throw new Error("only suit-resnet-v2 checkpoints run in the browser");
     }
 
-    if (metadata.dataset.encoding_version !== bindings.encodingVersion()) {
-        throw new Error(`checkpoint uses observation encoding ${metadata.dataset.encoding_version}`);
+    const version = metadata.dataset.encoding_version;
+    const planes = bindings.encodingPlanes(version);
+
+    if (planes === undefined) {
+        throw new Error(`checkpoint uses observation encoding ${version}`);
     }
 
     const weights = new bindings.NetworkWeights();
@@ -64,7 +67,14 @@ function loadNetwork(bindings, source) {
             weights.add(name, Uint32Array.from(tensor.shape), data);
         }
 
-        return new bindings.Network(weights);
+        const network = new bindings.Network(weights);
+
+        if (network.planes !== planes) {
+            network.free();
+            throw new Error(`checkpoint's stem does not read encoding ${version} observations`);
+        }
+
+        return network;
     } finally {
         weights.free();
     }

@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from numpy.typing import NDArray
 
-from mjers._native import Arena, Env
+from mjers._native import TILE_PLANES, Arena, Env
 
 WINS = (107, 108)
 
@@ -53,7 +53,8 @@ class ArenaTests(unittest.TestCase):
                     self.assertEqual(playing.pop(slot), (seed, seat))
                     results[(seed, seat)] = units
                     np.testing.assert_array_equal(
-                        np.asarray(seen.pop(slot)).reshape(-1, 50, 34), np.asarray(expected[(seed, seat)][0]).reshape(-1, 50, 34)
+                        np.asarray(seen.pop(slot)).reshape(-1, TILE_PLANES, 34),
+                        np.asarray(expected[(seed, seat)][0]).reshape(-1, TILE_PLANES, 34),
                     )
                     if queue:
                         start(slot)

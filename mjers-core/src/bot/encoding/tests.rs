@@ -5,8 +5,11 @@ use crate::bot::policy::{
     Policy,
     RandomBot,
 };
-use crate::game::Game;
 use crate::game::position::ResumePoint;
+use crate::game::{
+    Discard,
+    Game,
+};
 use crate::rules::Ruleset;
 use crate::rules::seat::Seat;
 use crate::tile::Tile;
@@ -137,4 +140,32 @@ fn pending_claim_responses_do_not_leak() {
         }
     }
     assert!(checked > 0);
+}
+
+#[test]
+fn version_two_planes_count_early_and_just_drawn_discards() {
+    let rules = Arc::new(Ruleset::family());
+    let mut game = Game::new(rules, 4, Seat::ALL[0]).unwrap();
+    let mut policy = crate::bot::spec::BotSpec::preset("efficiency").unwrap().build(0);
+    while game.discards().len() < 24 {
+        let acting = game.to_act().first().unwrap();
+        let action = policy.act(&game.observe(acting), &game.legal_actions(acting));
+        game.apply(acting, action).unwrap();
+    }
+    let acting = game.to_act().first().unwrap();
+    let encoded = encode(&game.observe(acting));
+    for relative in 0..4 {
+        let seat = Seat::ALL[(acting.index() + relative) % 4];
+        let own: Vec<&Discard> = game.discards().iter().filter(|d| d.seat == seat).collect();
+        let early: f32 = encoded.tiles[EARLY + relative].iter().sum();
+        assert_eq!(early, own.len().min(EARLY_DISCARDS) as f32 / 4.0);
+        for tile in Tile::all() {
+            let drawn = own.iter().filter(|d| d.tile == tile && d.drawn).count();
+            assert_eq!(encoded.tiles[DRAWN_DISCARDS + relative][tile.index()], drawn as f32 / 4.0);
+        }
+    }
+    assert!(game.discards().iter().any(|d| d.drawn) && game.discards().iter().any(|d| !d.drawn));
+    assert_eq!(planes(1), Some(V1_PLANES));
+    assert_eq!(planes(VERSION), Some(PLANES));
+    assert_eq!(planes(3), None);
 }

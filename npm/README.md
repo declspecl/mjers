@@ -72,7 +72,7 @@ const view = network.evaluate(game, seat); // { settlement, actions: [{ action, 
 ```
 
 Loading checks the architecture and observation encoding in the checkpoint
-metadata. Inference is synchronous, about a millisecond per decision. The
+metadata; version 1 networks read the first 50 planes of version 2 observations. Inference is synchronous, about a millisecond per decision. The
 checkpoint's training rules are not enforced here; play it under the rules it
 was trained for. Release networks with `free()` as well.
 

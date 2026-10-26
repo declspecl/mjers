@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from mjers._native import Env, NeuralNet
+from mjers._native import TILE_PLANES, V1_TILE_PLANES, Env, NeuralNet
 from mjers.collect import collect, make_env
 from mjers.model import (
     RESIDUAL_BLOCKS,
@@ -22,8 +22,13 @@ from mjers.model import (
 
 class NativeNetworkTests(unittest.TestCase):
     def test_rust_inference_matches_pytorch_over_complete_hands(self) -> None:
+        for planes in (TILE_PLANES, V1_TILE_PLANES):
+            with self.subTest(planes=planes):
+                self.check_parity(planes)
+
+    def check_parity(self, planes: int) -> None:
         torch.manual_seed(8)
-        network = ResidualPolicyNet(12, RESIDUAL_BLOCKS)
+        network = ResidualPolicyNet(12, RESIDUAL_BLOCKS, planes)
         # Perturb the zero-initialized branches so every layer matters.
         with torch.no_grad():
             for parameter in network.parameters():
@@ -53,7 +58,7 @@ class NativeNetworkTests(unittest.TestCase):
         self.assertGreater(decisions, 100)
 
     def test_incomplete_state_dicts_are_rejected(self) -> None:
-        tensors = {name: tensor.numpy() for name, tensor in ResidualPolicyNet(4, RESIDUAL_BLOCKS).state_dict().items()}
+        tensors = {name: tensor.numpy() for name, tensor in ResidualPolicyNet(4, RESIDUAL_BLOCKS, TILE_PLANES).state_dict().items()}
         del tensors["summary.bias"]
         with self.assertRaisesRegex(ValueError, "missing tensor summary.bias"):
             NeuralNet(tensors)
@@ -66,7 +71,7 @@ if __name__ == "__main__":
 class NeuralTeacherTests(unittest.TestCase):
     def test_strategy_files_make_the_network_the_teacher(self) -> None:
         torch.manual_seed(3)
-        network = ResidualPolicyNet(8, RESIDUAL_BLOCKS)
+        network = ResidualPolicyNet(8, RESIDUAL_BLOCKS, TILE_PLANES)
         with torch.no_grad():
             for parameter in network.parameters():
                 parameter.add_(0.1 * torch.randn_like(parameter))

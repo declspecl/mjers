@@ -26,6 +26,7 @@ use crate::bot::encoding::{
     CONTEXT,
     EncodedObservation,
     PLANES,
+    V1_PLANES,
 };
 use crate::bot::policy::Policy;
 use crate::game::action::Action;
@@ -372,6 +373,8 @@ impl Evaluation {
 #[derive(Debug, Clone)]
 pub struct ResidualNet {
     width: usize,
+    /// Leading observation planes the stem reads: [`V1_PLANES`] or [`PLANES`].
+    planes: usize,
     stem: Dense,
     blocks: Vec<Block>,
     tile_actions: Dense,
@@ -382,11 +385,14 @@ pub struct ResidualNet {
 
 impl ResidualNet {
     /// Builds from a complete `suit-resnet-v2` state dict; every tensor must be used.
+    /// The stem's input size tells which encoding version's planes it reads.
     pub fn new(weights: &Weights) -> Result<ResidualNet, WeightError> {
         let stem_shape = &weights.tensors.get("stem.weight").ok_or_else(|| WeightError::Missing("stem.weight".into()))?.shape;
         let width = stem_shape.first().copied().unwrap_or(0);
+        let inputs = stem_shape.get(1).copied().unwrap_or(0);
+        let planes = if inputs == V1_PLANES + CONTEXT { V1_PLANES } else { PLANES };
         let mut used = Vec::new();
-        let stem = Dense::load(weights, &mut used, "stem", PLANES + CONTEXT, width, true)?;
+        let stem = Dense::load(weights, &mut used, "stem", planes + CONTEXT, width, true)?;
         let mut blocks = Vec::new();
         while weights.tensors.contains_key(&format!("blocks.{}.pooled.weight", blocks.len())) {
             let prefix = format!("blocks.{}", blocks.len());
@@ -400,6 +406,7 @@ impl ResidualNet {
         }
         let net = ResidualNet {
             width,
+            planes,
             stem,
             blocks,
             tile_actions: Dense::load(weights, &mut used, "tile_actions", width, TILE_ACTIONS / KINDS, true)?,
@@ -413,19 +420,24 @@ impl ResidualNet {
         Ok(net)
     }
 
+    pub fn planes(&self) -> usize {
+        self.planes
+    }
+
     pub fn evaluate(
         &self,
         encoded: &EncodedObservation,
     ) -> Evaluation {
         let c = self.width;
-        let mut input = [0.0; PLANES + CONTEXT];
+        let mut buffer = [0.0; PLANES + CONTEXT];
+        let input = &mut buffer[..self.planes + CONTEXT];
         let mut features = vec![0.0; KINDS * c];
         for (tile, row) in features.chunks_exact_mut(c).enumerate() {
             for (value, plane) in input.iter_mut().zip(&encoded.tiles) {
                 *value = plane[tile];
             }
-            input[PLANES..].copy_from_slice(&encoded.context);
-            self.stem.apply(&input, row);
+            input[self.planes..].copy_from_slice(&encoded.context);
+            self.stem.apply(input, row);
         }
         let mut scratch = Scratch {
             active: vec![0.0; KINDS * c],

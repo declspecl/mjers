@@ -3,7 +3,7 @@ import unittest
 import torch
 from torch import Tensor
 
-from mjers._native import Env
+from mjers._native import TILE_PLANES, Env
 from mjers.augment import CHOW_PLANES, Relabeling, random_relabeling, relabel_actions, relabel_mask, relabel_tiles, relabeling
 from mjers.collect import collect
 
@@ -93,7 +93,7 @@ class AugmentationTests(unittest.TestCase):
                 self.assertEqual(int(mask.sum()), int(self.mask.sum()))
 
     def test_reversal_moves_chow_anchor_and_offered_position(self) -> None:
-        tiles = torch.zeros(1, 50, 34)
+        tiles = torch.zeros(1, TILE_PLANES, 34)
         tiles[0, CHOW_PLANES[1], 9 + 1] = 0.25  # 234p chow by the next seat
         tiles[0, OFFERED, 2] = 1.0  # offered 3m
         mask = torch.zeros(1, 110, dtype=torch.bool)

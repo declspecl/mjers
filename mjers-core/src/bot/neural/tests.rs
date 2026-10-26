@@ -14,6 +14,15 @@ pub(crate) fn random_weights(
     blocks: usize,
     seed: u64,
 ) -> Weights {
+    planes_weights(width, blocks, seed, PLANES)
+}
+
+fn planes_weights(
+    width: usize,
+    blocks: usize,
+    seed: u64,
+    planes: usize,
+) -> Weights {
     let mut rng = Rng::seed(seed);
     let mut weights = Weights::new();
     let mut add = |name: String, shape: Vec<usize>| {
@@ -25,7 +34,7 @@ pub(crate) fn random_weights(
         add(format!("{name}.weight"), weight);
         add(format!("{name}.bias"), vec![outputs]);
     };
-    layer("stem", vec![width, PLANES + CONTEXT, 1]);
+    layer("stem", vec![width, planes + CONTEXT, 1]);
     for block in 0..blocks {
         layer(&format!("blocks.{block}.suit_first"), vec![width, width, 1, 3]);
         layer(&format!("blocks.{block}.suit_second"), vec![width, width, 1, 3]);
@@ -179,4 +188,19 @@ fn tile_convolutions_match_the_pytorch_layout() {
             assert!((actual - expected).abs() < 1e-4, "tile {tile} output {o}: {actual} vs {expected}");
         }
     }
+}
+
+#[test]
+fn version_one_networks_read_only_their_planes() {
+    let net = ResidualNet::new(&planes_weights(5, 1, 8, V1_PLANES)).unwrap();
+    assert_eq!(net.planes(), V1_PLANES);
+    assert_eq!(ResidualNet::new(&random_weights(5, 1, 8)).unwrap().planes(), PLANES);
+    let original = observation(6);
+    let mut changed = original.clone();
+    for plane in &mut changed.tiles[V1_PLANES..] {
+        plane.fill(1.0);
+    }
+    assert_eq!(net.evaluate(&original), net.evaluate(&changed));
+    let misshapen = planes_weights(5, 1, 8, PLANES - 1);
+    assert!(matches!(ResidualNet::new(&misshapen), Err(WeightError::Shape { .. })));
 }

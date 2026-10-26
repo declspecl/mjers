@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 ENCODING_VERSION: int
 ACTION_COUNT: int
 TILE_PLANES: int
+V1_TILE_PLANES: int
 CONTEXT_SIZE: int
 PASS_ACTION: int
 

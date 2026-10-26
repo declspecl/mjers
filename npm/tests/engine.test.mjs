@@ -229,14 +229,14 @@ test("both rulesets finish games, including wins, draws, and kongs", () => {
 });
 
 /** A tiny suit-resnet-v2 checkpoint with deterministic weights. */
-function checkpoint({ architecture = "suit-resnet-v2", drop } = {}) {
+function checkpoint({ architecture = "suit-resnet-v2", drop, version = 1, planes = 50 } = {}) {
     const width = 2;
     const layers = [];
     const layer = (name, weight) => {
         layers.push([`${name}.weight`, weight], [`${name}.bias`, [weight[0]]]);
     };
 
-    layer("stem", [width, 72, 1]);
+    layer("stem", [width, planes + 22, 1]);
     layer("blocks.0.suit_first", [width, width, 1, 3]);
     layer("blocks.0.suit_second", [width, width, 1, 3]);
     layer("blocks.0.honor_first", [width, width, 1]);
@@ -247,7 +247,7 @@ function checkpoint({ architecture = "suit-resnet-v2", drop } = {}) {
     layer("other_actions", [8, width]);
     layer("value_layer", [1, width]);
 
-    const metadata = { architecture, dataset: { encoding_version: 1 } };
+    const metadata = { architecture, dataset: { encoding_version: version } };
     const header = { __metadata__: { mjers: JSON.stringify(metadata) } };
     const values = [];
 
@@ -316,4 +316,9 @@ test("networks load from checkpoint bytes, evaluate, and play legal hands", () =
 
     assert.throws(() => mjers.loadNetwork(checkpoint({ architecture: "mlp-relu-v1" })), /suit-resnet-v2/);
     assert.throws(() => mjers.loadNetwork(checkpoint({ drop: "summary.bias" })), /missing tensor summary.bias/);
+    assert.throws(() => mjers.loadNetwork(checkpoint({ version: 9 })), /observation encoding 9/);
+    assert.throws(() => mjers.loadNetwork(checkpoint({ version: 2 })), /does not read encoding 2/);
+    const current = mjers.loadNetwork(checkpoint({ version: 2, planes: 58 }));
+    assert.equal(current.planes, 58);
+    current.free();
 });
