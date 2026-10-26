@@ -257,6 +257,18 @@ impl Env {
         Ok(estimates.iter().map(|e| (e.difference, e.difference_stderr)).collect())
     }
 
+    /// Hidden-information training labels: for each other seat in encoding order
+    /// (next, across, previous), the tile kinds that would complete its hand now.
+    /// Never a policy input.
+    fn opponent_waits(
+        &self,
+        py: Python<'_>,
+    ) -> PyResult<Py<PyArray2<bool>>> {
+        let seat = self.current_seat()?;
+        let waits = opponent_waits(&self.game, seat);
+        Ok(Array2::from_shape_fn((3, mjers_core::tile::KINDS), |(other, tile)| waits[other][tile]).into_pyarray(py).unbind())
+    }
+
     /// Logits (illegal actions at -inf) and predicted settlement units for the current observation.
     fn evaluate_network(
         &self,
@@ -376,6 +388,17 @@ impl Arena {
         )
     }
 
+    /// `Env.opponent_waits` for every pending student, in `pending` order.
+    fn pending_waits(
+        &self,
+        py: Python<'_>,
+    ) -> Py<PyArray3<bool>> {
+        let waits: Vec<[[bool; mjers_core::tile::KINDS]; 3]> = self.slots.iter().flatten().map(|hand| opponent_waits(&hand.game, hand.seat)).collect();
+        Array3::from_shape_fn((waits.len(), 3, mjers_core::tile::KINDS), |(row, other, tile)| waits[row][other][tile])
+            .into_pyarray(py)
+            .unbind()
+    }
+
     /// Applies one student action per listed slot, then plays on to its next choice.
     fn act(
         &mut self,
@@ -474,6 +497,20 @@ impl Arena {
         }
         Ok(())
     }
+}
+
+/// Tile kinds that would complete each other seat's hand, in `seat.others()` order.
+fn opponent_waits(
+    game: &Game,
+    seat: Seat,
+) -> [[bool; mjers_core::tile::KINDS]; 3] {
+    let mut waits = [[false; mjers_core::tile::KINDS]; 3];
+    for (row, other) in seat.others().enumerate() {
+        for tile in game.hand(other).waits() {
+            waits[row][tile.index()] = true;
+        }
+    }
+    waits
 }
 
 #[pymodule]

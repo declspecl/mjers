@@ -5,8 +5,11 @@ from pathlib import Path
 import msgspec
 import numpy as np
 
-from mjers._native import ACTION_COUNT, CONTEXT_SIZE, TILE_PLANES, Env, Observation
+from mjers._native import ACTION_COUNT, CONTEXT_SIZE, PASS_ACTION, TILE_PLANES, Env, Observation
 from mjers.collect import collect
+
+# Encoded index of winning on another seat's discard.
+WIN_ACTION = 107
 
 
 @dataclass(frozen=True)
@@ -126,6 +129,25 @@ class EnvironmentTests(unittest.TestCase):
             expected = np.asarray(rewards, dtype=np.int32)[shard.seats[start:i]]
             np.testing.assert_array_equal(shard.returns[start:i], expected)
         self.assertEqual(i, n)
+
+    def test_opponent_waits_include_every_tile_won_from_a_discard(self) -> None:
+        env = Env("efficiency", rules="family")
+        wins = 0
+        for seed in range(40):
+            observation = env.reset(seed, seed % 4)
+            discard: tuple[int, int, np.ndarray] | None = None
+            while observation is not None:
+                waits = env.opponent_waits()
+                self.assertEqual((waits.shape, waits.dtype), ((3, 34), np.bool_))
+                if observation.action_mask[WIN_ACTION] and discard is not None:
+                    seat, tile, before = discard
+                    self.assertTrue(before[(observation.seat - seat) % 4 - 1, tile])
+                    wins += 1
+                action = env.teacher_action()
+                if not observation.action_mask[PASS_ACTION]:
+                    discard = (observation.seat, action, waits) if action < 34 else None
+                observation = env.step(action).observation
+        self.assertGreater(wins, 0)
 
     def test_rules_preset_and_custom_json_survive_reset(self) -> None:
         preset = Env("efficiency", rules="discarder-pays")

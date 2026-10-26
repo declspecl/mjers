@@ -77,6 +77,18 @@ class ArenaTests(unittest.TestCase):
             refill()
         self.assertEqual(results, {case: expected[case][1] for case in cases})
 
+    def test_wait_labels_have_a_row_per_pending_student(self) -> None:
+        arena = Arena("efficiency", rules="family", slots=4)
+        for slot in range(4):
+            arena.start(slot, 30 + slot, slot)
+        for _ in range(20):
+            slots, _tiles, _context, mask = arena.pending()
+            waits = arena.pending_waits()
+            self.assertEqual(waits.shape, (len(slots), 3, 34))
+            if not slots:
+                break
+            arena.act(slots, [int(np.flatnonzero(row)[0]) for row in mask])
+
     def test_rejects_busy_slots_and_illegal_actions(self) -> None:
         arena = Arena("efficiency", rules="family", slots=1)
         arena.start(0, 3, 1)
