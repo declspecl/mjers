@@ -37,19 +37,22 @@ function ms(base: number): number {
     return Math.round(base * PACE);
 }
 
-/** The washing area: tiles stay inside it, clear of where the walls will stand. */
-const WASH_RADIUS = 300;
+/** Tiles wash over the whole felt, inside this half-width of the square table and this radius at its corners. */
+const TABLE_REACH = 440;
+const CORNER_REACH = 540;
+/** The pile the tiles are pushed into before the washing starts. */
+const HEAP_RADIUS = 280;
 /** Tiles are treated as discs this wide when they knock into each other. */
-const TILE_RADIUS = 19;
-const PALM_RADIUS = 46;
-/** Each hand sweeps a circle this big around a spot in front of its player, once every this many milliseconds. */
-const HAND_CIRCLE = 95;
-const HAND_PERIOD = 760;
-const WASH_MS = 2100;
-/** How far round the table the hands work their way during the wash, in radians. */
-const HEAP_TURN = 1.6;
-const FRAME_MS = 60;
-const SUBSTEPS = 4;
+const TILE_RADIUS = 20;
+const PALM_RADIUS = 62;
+/** Each hand scrubs loops this big, once every this many milliseconds, while working its way over its player's side. */
+const HAND_LOOP = 120;
+const HAND_PERIOD = 460;
+const WASH_MS = 5000;
+/** The whole mass swirls counter-clockwise this fast, in radians a second, fastest partway out. */
+const SWIRL = 2.6;
+const FRAME_MS = 50;
+const SUBSTEPS = 5;
 
 /** The same angle as `rotation`, moved by whole turns to lie within half a turn of `target`. */
 function nearestTurn(rotation: number, target: number): number {
@@ -66,7 +69,26 @@ interface Body {
     twist: number;
 }
 
-/** Pushes overlapping tiles apart, the way solid tiles shoulder each other aside, and keeps them on the washing area. */
+/** Keeps a tile on the felt, bouncing it off the rim. */
+function contain(body: Body) {
+    for (const axis of ["x", "y"] as const) {
+        const speed = axis === "x" ? "vx" : "vy";
+
+        if (Math.abs(body[axis]) > TABLE_REACH) {
+            body[axis] = Math.sign(body[axis]) * TABLE_REACH;
+            body[speed] = -body[speed] * 0.5;
+        }
+    }
+
+    const distance = Math.hypot(body.x, body.y);
+
+    if (distance > CORNER_REACH) {
+        body.x *= CORNER_REACH / distance;
+        body.y *= CORNER_REACH / distance;
+    }
+}
+
+/** Pushes overlapping tiles apart, the way solid tiles knock each other aside. */
 function separate(bodies: Body[]) {
     const reach = TILE_RADIUS * 2;
 
@@ -95,16 +117,19 @@ function separate(bodies: Body[]) {
                 a.y -= dy * shove;
                 b.x += dx * shove;
                 b.y += dy * shove;
+                // Knocks pass some speed between the two.
+                const vx = (a.vx - b.vx) * 0.15;
+                const vy = (a.vy - b.vy) * 0.15;
+
+                a.vx -= vx;
+                a.vy -= vy;
+                b.vx += vx;
+                b.vy += vy;
             }
         }
 
         for (const body of bodies) {
-            const distance = Math.hypot(body.x, body.y);
-
-            if (distance > WASH_RADIUS) {
-                body.x *= WASH_RADIUS / distance;
-                body.y *= WASH_RADIUS / distance;
-            }
+            contain(body);
         }
     }
 }
@@ -113,7 +138,7 @@ function separate(bodies: Body[]) {
 function heapBodies(state: { random: number }): Body[] {
     const bodies = Array.from({ length: TILE_COUNT }, () => {
         const angle = nextRandom(state) * Math.PI * 2;
-        const distance = Math.sqrt(nextRandom(state)) * WASH_RADIUS * 0.85;
+        const distance = Math.sqrt(nextRandom(state)) * HEAP_RADIUS;
 
         return {
             x: Math.cos(angle) * distance,
@@ -121,7 +146,7 @@ function heapBodies(state: { random: number }): Body[] {
             vx: 0,
             vy: 0,
             rotation: nextRandom(state) * 360,
-            twist: (nextRandom(state) - 0.5) * 1.6,
+            twist: (nextRandom(state) - 0.5) * 1.4,
         };
     });
 
@@ -144,22 +169,22 @@ function posesOf(bodies: Body[]): Pose[] {
 }
 
 /**
- * Washing the tiles: all four players lay both palms flat on the face-down tiles and scrub them round in big, quick circles,
- * every hand going counter-clockwise. Tiles under a palm are carried with it; the rest are shouldered aside, since tiles are
- * solid and never pass through each other. A small simulation runs the motion, sampled into short linear frames.
+ * Washing the tiles: all four players lay both palms flat on the face-down tiles and scrub them all over the table in big, fast
+ * loops, every hand going counter-clockwise, while the whole mass swirls counter-clockwise round the table. Tiles under a palm
+ * are carried with it; the rest are knocked aside, since tiles are solid and never pass through each other. A small simulation
+ * runs the motion, sampled into short linear frames.
  */
 function washFrames(bodies: Body[], state: { random: number }): Frame[] {
     const hands = ([0, 1, 2, 3] as Seat[]).flatMap((seat) =>
-        [-1, 1].map((side) => {
-            const anchor = toStage(seat, side * 105, 165);
-
-            return {
-                x: anchor.x - CENTER,
-                y: anchor.y - CENTER,
-                phase: nextRandom(state) * Math.PI * 2,
-                period: HAND_PERIOD * (0.85 + nextRandom(state) * 0.3),
-            };
-        }),
+        [-1, 1].map((side) => ({
+            seat,
+            side,
+            phase: nextRandom(state) * Math.PI * 2,
+            period: HAND_PERIOD * (0.8 + nextRandom(state) * 0.4),
+            // Each hand roams over its player's side of the table on its own slow path.
+            roam: nextRandom(state) * Math.PI * 2,
+            roamPeriod: 1300 + nextRandom(state) * 900,
+        })),
     );
     const frames: Frame[] = [];
     const dt = FRAME_MS / SUBSTEPS;
@@ -168,41 +193,47 @@ function washFrames(bodies: Body[], state: { random: number }): Frame[] {
         for (let sub = 1; sub <= SUBSTEPS; sub++) {
             const now = time - FRAME_MS + sub * dt;
             // Hands get going quickly and lift off at the end.
-            const effort = Math.min(1, now / 250, (WASH_MS - now) / 300);
+            const effort = Math.min(1, now / 300, (WASH_MS - now) / 400);
             const palms = hands.map((hand) => {
+                const roam = hand.roam + (now / hand.roamPeriod) * Math.PI * 2;
+                const anchor = toStage(hand.seat, hand.side * (150 + Math.sin(roam) * 110), 170 + Math.cos(roam * 0.7) * 150);
                 // Counter-clockwise on screen, where y points down, means the angle runs backwards.
                 const angle = hand.phase - (now / hand.period) * Math.PI * 2;
-                const speed = ((Math.PI * 2 * HAND_CIRCLE) / hand.period) * dt * effort;
-                // The players lean round as they scrub, so the spots their hands work also drift counter-clockwise.
-                const drift = -(now / WASH_MS) * HEAP_TURN;
-                const x = hand.x * Math.cos(drift) - hand.y * Math.sin(drift);
-                const y = hand.x * Math.sin(drift) + hand.y * Math.cos(drift);
+                const speed = ((Math.PI * 2 * HAND_LOOP) / hand.period) * dt * effort;
 
-                const px = x + Math.cos(angle) * HAND_CIRCLE;
-                const py = y + Math.sin(angle) * HAND_CIRCLE;
-                const reach = Math.hypot(px, py) || 1;
-                // Players bear down on the stroke that pushes round the table counter-clockwise and ease up on the way back,
-                // so the heap as a whole circulates. Counter-clockwise round the centre at (px, py) is along (py, -px).
-                const along = Math.sin(angle) * (py / reach) - Math.cos(angle) * (-px / reach);
-
-                return { x: px, y: py, vx: Math.sin(angle) * speed, vy: -Math.cos(angle) * speed, press: 0.5 + 0.5 * along };
+                return {
+                    x: anchor.x - CENTER + Math.cos(angle) * HAND_LOOP,
+                    y: anchor.y - CENTER + Math.sin(angle) * HAND_LOOP,
+                    vx: Math.sin(angle) * speed,
+                    vy: -Math.cos(angle) * speed,
+                };
             });
 
             for (const body of bodies) {
+                // The swirl: counter-clockwise round the centre is along (y, -x).
+                const distance = Math.hypot(body.x, body.y);
+                const swirl = SWIRL * (dt / 1000) * effort * Math.min(1, distance / 200);
+
+                // Players keep raking tiles off the rim back into the middle.
+                const rake = distance > 270 ? ((distance - 270) / distance) * 0.004 * effort : 0;
+
+                body.vx += (body.y * swirl - body.vx) * 0.05 - body.x * rake;
+                body.vy += (-body.x * swirl - body.vy) * 0.05 - body.y * rake;
+
                 for (const palm of palms) {
                     const gap = Math.hypot(body.x - palm.x, body.y - palm.y);
 
                     if (gap < PALM_RADIUS + TILE_RADIUS) {
-                        // Friction under the palm drags the tile along with the hand.
-                        const grip = (gap < PALM_RADIUS ? 0.6 : 0.3) * palm.press;
+                        // Friction under the palm drags the tile along with the hand; at its edge the hand flicks tiles away.
+                        const grip = gap < PALM_RADIUS ? 0.6 : 0.2;
 
                         body.vx += (palm.vx - body.vx) * grip;
                         body.vy += (palm.vy - body.vy) * grip;
                     }
                 }
 
-                body.vx *= 0.82;
-                body.vy *= 0.82;
+                body.vx *= 0.9;
+                body.vy *= 0.9;
                 body.x += body.vx;
                 body.y += body.vy;
                 body.rotation += Math.hypot(body.vx, body.vy) * body.twist;
