@@ -54,7 +54,7 @@ try {
                 '-e', 'AWS_LAMBDA_FUNCTION_NAME=packaging-check', '-e', 'AWS_LAMBDA_FUNCTION_VERSION=1',
                 '-e', 'AWS_LAMBDA_FUNCTION_MEMORY_SIZE=512',
                 '-e', 'TABLES_TABLE_NAME=unused', '-e', 'CONNECTIONS_TABLE_NAME=unused',
-                '-e', 'WEBSOCKET_MANAGEMENT_ENDPOINT=http://127.0.0.1:1', '-e', 'SITE_ORIGIN=https://game.example',
+                '-e', 'WEBSOCKET_MANAGEMENT_ENDPOINT=http://127.0.0.1:1', '-e', 'SITE_ORIGINS=https://game.example',
                 '--entrypoint', '/var/task/bootstrap', 'public.ecr.aws/lambda/provided:al2023'],
                 { stdio: ['ignore', 'inherit', 'inherit'] });
             child.once('error', reject);

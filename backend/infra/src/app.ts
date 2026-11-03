@@ -12,7 +12,6 @@ if (!existsSync(archive)) throw new Error("Build the arm64 Lambda archive with b
 new MultiplayerStack(app, `mjers-${config.stage}-backend`, {
     env: config.env,
     stage: config.stage,
-    siteOrigin: config.siteOrigin,
-    budgetEmail: config.budgetEmail,
+    siteOrigins: config.siteOrigins,
     code: Code.fromAsset(archive),
 });

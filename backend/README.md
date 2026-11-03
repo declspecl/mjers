@@ -92,7 +92,7 @@ and verification run outside the async runtime.
 
 Local: `/ws?table=CODE&token=SEAT_TOKEN`. AWS: use the CDK WebSocket endpoint with
 the same query parameters. Authentication fixes the seat; client bodies cannot
-supply another seat. Allowed browser origins must match `SITE_ORIGIN` on AWS.
+supply another seat. Allowed browser origins must match `SITE_ORIGINS` on AWS.
 
 Send `sync` after **every** socket open, including reconnects. API Gateway's
 `$connect` handler saves authentication/ownership but does not send to a socket
@@ -226,15 +226,14 @@ From `backend/infra`, set deployment configuration explicitly:
 ```sh
 export DEPLOYMENT_STAGE=dev
 export AWS_REGION=us-east-1
-export SITE_ORIGIN=https://your-game-host
-export BUDGET_EMAIL=your-notification-address
+export SITE_ORIGINS=https://mjers.pages.dev,https://mjers.gavindhondt.com
 pnpm synth
 ```
 
 `.env.example` lists the variables; the app does not load `.env` files implicitly.
 `LAMBDA_ARCHIVE` can override the built ZIP path. Offline synthesis requires no
 AWS credentials. Real deployment uses the selected AWS profile and CDK account.
-**Ask the owner to select/approve the account, region, origin and budget address
+**Ask the owner to select/approve the account, region and allowed origins
 before bootstrapping or deploying.** No AWS resources have been deployed.
 
 The stack defines:
@@ -246,9 +245,8 @@ The stack defines:
   retained when the stack is removed; development tables are destroyed.
 - One-week Lambda log retention. Request bodies, tokens and query strings are
   never logged by application code; WebSocket data tracing is disabled.
-- A monthly **account-wide** $1 actual-spend email notification. This works
-  without cost allocation tag activation, but may already trigger on an existing
-  AWS account's unrelated spending. It is a warning, not an automatic shutdown.
+
+No AWS budgets or budget notifications are provisioned.
 
 After owner approval, use `pnpm diff`, `pnpm exec cdk bootstrap` only if needed,
 and `pnpm deploy`. CDK outputs the HTTP and WebSocket endpoints and table names.

@@ -173,7 +173,7 @@ async fn gateway_rooms_connections_and_full_hands() {
         connections.clone(),
         limits.clone(),
         Client::from_conf(config),
-        "https://game.example".into(),
+        vec!["https://game.example".into(), "https://alias.example".into()],
         fixed_now,
     );
 

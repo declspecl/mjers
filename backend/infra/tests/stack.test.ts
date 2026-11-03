@@ -6,12 +6,11 @@ import { Code } from "aws-cdk-lib/aws-lambda";
 import { MultiplayerStack } from "../src/stacks/multiplayer-stack.js";
 import { readDeploymentConfig } from "../src/config.js";
 
-test("backend stack wires native Lambda, HTTP, sockets, conditional storage and a budget", () => {
+test("backend stack wires native Lambda, HTTP, sockets, conditional storage without budgets", () => {
     const app = new App();
     const stack = new MultiplayerStack(app, "test-backend", {
         stage: "prod",
-        siteOrigin: "https://game.example",
-        budgetEmail: "owner@example.com",
+        siteOrigins: ["https://game.example", "https://alias.example"],
         code: Code.fromCfnParameters(),
     });
     const template = Template.fromStack(stack);
@@ -27,24 +26,24 @@ test("backend stack wires native Lambda, HTTP, sockets, conditional storage and 
         Handler: "bootstrap",
         Timeout: 25,
         ReservedConcurrentExecutions: 8,
-        Environment: { Variables: Match.objectLike({ SITE_ORIGIN: "https://game.example" }) },
+        Environment: { Variables: Match.objectLike({ SITE_ORIGINS: "https://game.example,https://alias.example" }) },
     });
     for (const route of ["POST /tables", "POST /tables/{id}/join", "$connect", "$disconnect", "$default"]) {
         template.hasResourceProperties("AWS::ApiGatewayV2::Route", { RouteKey: route, Target: Match.anyValue() });
     }
     template.hasResourceProperties("AWS::ApiGatewayV2::Api", {
         ProtocolType: "HTTP",
-        CorsConfiguration: { AllowOrigins: ["https://game.example"], AllowMethods: ["POST"], AllowHeaders: ["content-type"], MaxAge: 3600 },
+        CorsConfiguration: {
+            AllowOrigins: ["https://game.example", "https://alias.example"],
+            AllowMethods: ["POST"],
+            AllowHeaders: ["content-type"],
+            MaxAge: 3600,
+        },
     });
     template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
         DefaultRouteSettings: { ThrottlingBurstLimit: 100, ThrottlingRateLimit: 50, DataTraceEnabled: false },
     });
-    template.hasResourceProperties("AWS::Budgets::Budget", {
-        Budget: { BudgetType: "COST", BudgetLimit: { Amount: 1, Unit: "USD" }, TimeUnit: "MONTHLY", BudgetName: "mjers-prod-monthly" },
-        NotificationsWithSubscribers: Match.arrayWith([
-            Match.objectLike({ Subscribers: [{ SubscriptionType: "EMAIL", Address: "owner@example.com" }] }),
-        ]),
-    });
+    template.resourceCountIs("AWS::Budgets::Budget", 0);
     const resources = template.toJSON().Resources as Record<string, { Type: string; DeletionPolicy?: string; Properties?: unknown }>;
     for (const resource of Object.values(resources)) {
         if (resource.Type === "AWS::DynamoDB::Table") assert.equal(resource.DeletionPolicy, "Retain");
@@ -61,15 +60,14 @@ test("backend stack wires native Lambda, HTTP, sockets, conditional storage and 
     app.synth();
 });
 
-test("deployment configuration requires explicit stage, origin and notification address", () => {
+test("deployment configuration accepts the explicit production origin allowlist", () => {
     assert.throws(() => readDeploymentConfig({}), /DEPLOYMENT_STAGE/);
-    assert.throws(() => readDeploymentConfig({ DEPLOYMENT_STAGE: "prod" }), /SITE_ORIGIN/);
-    assert.throws(() => readDeploymentConfig({ DEPLOYMENT_STAGE: "prod", SITE_ORIGIN: "https://game.example" }), /BUDGET_EMAIL/);
-    assert.throws(
-        () => readDeploymentConfig({ DEPLOYMENT_STAGE: "prod", SITE_ORIGIN: "https://game.example/path", BUDGET_EMAIL: "a@b.example" }),
-        /origin/,
-    );
-    const config = readDeploymentConfig({ DEPLOYMENT_STAGE: "dev", SITE_ORIGIN: "http://localhost:5173/", BUDGET_EMAIL: "a@b.example" });
-    assert.equal(config.siteOrigin, "http://localhost:5173");
+    assert.throws(() => readDeploymentConfig({ DEPLOYMENT_STAGE: "prod" }), /SITE_ORIGINS/);
+    assert.throws(() => readDeploymentConfig({ DEPLOYMENT_STAGE: "prod", SITE_ORIGINS: "https://game.example/path" }), /origins/);
+    const config = readDeploymentConfig({
+        DEPLOYMENT_STAGE: "prod",
+        SITE_ORIGINS: "https://mjers.pages.dev,https://mjers.gavindhondt.com/",
+    });
+    assert.deepEqual(config.siteOrigins, ["https://mjers.pages.dev", "https://mjers.gavindhondt.com"]);
     assert.ok(config.lambdaArchive.endsWith("/target/lambda/mjers-lambda/bootstrap.zip"));
 });

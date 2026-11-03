@@ -18,7 +18,7 @@ async fn main() -> Result<(), Error> {
     let tables = std::env::var("TABLES_TABLE_NAME")?;
     let connections = std::env::var("CONNECTIONS_TABLE_NAME")?;
     let endpoint = std::env::var("WEBSOCKET_MANAGEMENT_ENDPOINT")?;
-    let origin = std::env::var("SITE_ORIGIN")?;
+    let origins = std::env::var("SITE_ORIGINS")?.split(',').map(|origin| origin.trim().to_owned()).collect();
     let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
     let database = aws_sdk_dynamodb::Client::new(&config);
     let management = aws_sdk_apigatewaymanagement::Client::from_conf(aws_sdk_apigatewaymanagement::config::Builder::from(&config).endpoint_url(endpoint).build());
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Error> {
         ConnectionStore::new(database.clone(), connections.clone()),
         RateLimiter::new(database, connections),
         management,
-        origin,
+        origins,
         epoch_seconds,
     );
     lambda_runtime::run(service_fn(|event: LambdaEvent<GatewayEvent>| async { Ok::<_, Error>(gateway.handle(event.payload).await) })).await

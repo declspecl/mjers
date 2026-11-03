@@ -1,7 +1,6 @@
 import { CfnOutput, Duration, Fn, RemovalPolicy, Stack, Tags, type StackProps } from "aws-cdk-lib";
 import { CorsHttpMethod, HttpApi, HttpMethod, WebSocketApi, WebSocketStage, CfnStage } from "aws-cdk-lib/aws-apigatewayv2";
 import { HttpLambdaIntegration, WebSocketLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
-import { CfnBudget } from "aws-cdk-lib/aws-budgets";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Architecture, Code, Function, LoggingFormat, Runtime } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
@@ -10,8 +9,7 @@ import { RoomStorage } from "../constructs/room-storage.js";
 
 export interface MultiplayerStackProps extends StackProps {
     readonly stage: "dev" | "prod";
-    readonly siteOrigin: string;
-    readonly budgetEmail: string;
+    readonly siteOrigins: readonly string[];
     readonly code: Code;
 }
 
@@ -28,7 +26,7 @@ export class MultiplayerStack extends Stack {
         const http = new HttpApi(this, "Http", {
             apiName: `mjers-${props.stage}-rooms`,
             corsPreflight: {
-                allowOrigins: [props.siteOrigin],
+                allowOrigins: [...props.siteOrigins],
                 allowMethods: [CorsHttpMethod.POST],
                 allowHeaders: ["content-type"],
                 maxAge: Duration.hours(1),
@@ -63,7 +61,7 @@ export class MultiplayerStack extends Stack {
                 TABLES_TABLE_NAME: storage.rooms.tableName,
                 CONNECTIONS_TABLE_NAME: storage.connections.tableName,
                 WEBSOCKET_MANAGEMENT_ENDPOINT: managementEndpoint,
-                SITE_ORIGIN: props.siteOrigin,
+                SITE_ORIGINS: props.siteOrigins.join(","),
             },
         });
         // Grant only operations used by the shared store; no scans or deletes of rooms.
@@ -109,26 +107,6 @@ export class MultiplayerStack extends Stack {
         const socketResource = socketStage.node.defaultChild;
         if (!(socketResource instanceof CfnStage)) throw new Error("WebSocket stage is required.");
         socketResource.defaultRouteSettings = { throttlingBurstLimit: 100, throttlingRateLimit: 50, dataTraceEnabled: false };
-        // Account-wide warning: does not depend on cost allocation tags being activated.
-        new CfnBudget(this, "MonthlyBudget", {
-            budget: {
-                budgetName: `mjers-${props.stage}-monthly`,
-                budgetType: "COST",
-                timeUnit: "MONTHLY",
-                budgetLimit: { amount: 1, unit: "USD" },
-            },
-            notificationsWithSubscribers: [
-                {
-                    notification: {
-                        notificationType: "ACTUAL",
-                        comparisonOperator: "GREATER_THAN",
-                        thresholdType: "ABSOLUTE_VALUE",
-                        threshold: 1,
-                    },
-                    subscribers: [{ subscriptionType: "EMAIL", address: props.budgetEmail }],
-                },
-            ],
-        });
         new CfnOutput(this, "HttpEndpoint", { value: http.apiEndpoint });
         new CfnOutput(this, "WebSocketEndpoint", { value: socketStage.url });
         new CfnOutput(this, "RoomsTable", { value: storage.rooms.tableName });

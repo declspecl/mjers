@@ -40,7 +40,7 @@ pub struct Gateway {
     connections: ConnectionStore,
     limits: RateLimiter,
     management: Client,
-    site_origin: String,
+    site_origins: Vec<String>,
     now: fn() -> Result<u64, StoreError>,
 }
 impl Gateway {
@@ -49,7 +49,7 @@ impl Gateway {
         connections: ConnectionStore,
         limits: RateLimiter,
         management: Client,
-        site_origin: String,
+        site_origins: Vec<String>,
         now: fn() -> Result<u64, StoreError>,
     ) -> Self {
         Self {
@@ -57,7 +57,7 @@ impl Gateway {
             connections,
             limits,
             management,
-            site_origin,
+            site_origins,
             now,
         }
     }
@@ -151,7 +151,7 @@ impl Gateway {
         event: &GatewayEvent,
         id: &str,
     ) -> Result<(), ServiceError> {
-        if event.header("origin").is_some_and(|origin| origin != self.site_origin) {
+        if event.header("origin").is_some_and(|origin| !self.site_origins.iter().any(|allowed| allowed == origin)) {
             return Err(bad_token());
         }
         let now = (self.now)()?;
