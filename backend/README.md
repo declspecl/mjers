@@ -3,6 +3,11 @@
 The backend runs the native engine in both a local WebSocket server and AWS
 Lambda. The room UI and browser connection are a separate next step.
 
+Production is deployed in `us-east-1`. Public endpoint/configuration details are
+in [`deployment.prod.json`](deployment.prod.json). The live AWS smoke test passed
+on 2026-11-03, including HTTP CORS and WebSocket origin checks for both
+`https://mjers.pages.dev` and `https://mjers.gavindhondt.com`.
+
 | Directory | Responsibility |
 | --- | --- |
 | `table/` | Pure room state, engine replay, bots, scoring and wire types |
@@ -234,7 +239,7 @@ pnpm synth
 `LAMBDA_ARCHIVE` can override the built ZIP path. Offline synthesis requires no
 AWS credentials. Real deployment uses the selected AWS profile and CDK account.
 **Ask the owner to select/approve the account, region and allowed origins
-before bootstrapping or deploying.** No AWS resources have been deployed.
+before bootstrapping or deploying.** The production deployment above was approved by the owner.
 
 The stack defines:
 
@@ -254,13 +259,15 @@ and `pnpm deploy`. CDK outputs the HTTP and WebSocket endpoints and table names.
 After deploying, run the real AWS smoke test:
 
 ```sh
-node backend/scripts/smoke-aws.mjs HTTPS_ENDPOINT WSS_ENDPOINT
+SITE_ORIGINS=https://mjers.pages.dev,https://mjers.gavindhondt.com \
+  node backend/scripts/smoke-aws.mjs HTTPS_ENDPOINT WSS_ENDPOINT
 ```
 
 It creates a password-protected two-human room, joins over HTTP, opens two
 sockets, completes a hand using explicit autoplay, reconnects and starts the next
-hand. It leaves the room to expire naturally. IAM, real API Gateway routing and
-cloud delivery remain unverified until that test runs on an approved deployment.
+hand. It leaves the room to expire naturally. The production run verified IAM, API Gateway routing, callbacks, completed
+hands, reconnection and next-hand rotation. Supplying `SITE_ORIGINS` also checks
+HTTP CORS, both allowed WebSocket origins and rejection of an unrelated origin.
 
 ## Deferred work
 

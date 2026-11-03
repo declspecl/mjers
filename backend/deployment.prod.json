@@ -1,0 +1,17 @@
+{
+    "stack": "mjers-prod-backend",
+    "account": "939880360164",
+    "region": "us-east-1",
+    "stage": "prod",
+    "source_commit": "d348a8a64ffa4f2947bfd6bff4413de0d5916255",
+    "lambda_code_sha256": "AkPB9teF7cusvnQgJLL6uiANYQhx8lyQnKjSvM4+Aq0=",
+    "verified_at": "2026-11-03T05:32:06.345Z",
+    "origins": [
+        "https://mjers.pages.dev",
+        "https://mjers.gavindhondt.com"
+    ],
+    "http_endpoint": "https://ovx79phvqa.execute-api.us-east-1.amazonaws.com",
+    "websocket_endpoint": "wss://21g3gv0b56.execute-api.us-east-1.amazonaws.com/prod",
+    "rooms_table": "mjers-prod-backend-StorageRoomsF4ABD1B4-VNHNSTUGE7C1",
+    "connections_table": "mjers-prod-backend-StorageConnections942F4ABF-NBFWWFBMLNG7"
+}

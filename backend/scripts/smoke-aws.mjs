@@ -1,6 +1,7 @@
 // Run only after deployment: node backend/scripts/smoke-aws.mjs HTTPS_URL WSS_URL
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { connect as tlsConnect } from 'node:tls';
 
 const [http, sockets] = process.argv.slice(2);
 if (!http || !sockets || new URL(http).protocol !== 'https:' || new URL(sockets).protocol !== 'wss:') {
@@ -50,7 +51,40 @@ const post = async (path, body, expected = 200) => {
     assert.equal(response.status, expected);
     return response.json();
 };
+const origins = (process.env.SITE_ORIGINS ?? '').split(',').filter(Boolean);
+async function checkSocketOrigin(joined, origin, expected) {
+    const url = new URL(sockets);
+    url.searchParams.set('table', joined.table);
+    url.searchParams.set('token', joined.seat_token);
+    await new Promise((resolve, reject) => {
+        const socket = tlsConnect({ host: url.hostname, port: Number(url.port || 443), servername: url.hostname }, () => {
+            socket.write([
+                `GET ${url.pathname}${url.search} HTTP/1.1`, `Host: ${url.host}`,
+                'Upgrade: websocket', 'Connection: Upgrade', 'Sec-WebSocket-Version: 13',
+                `Sec-WebSocket-Key: ${randomBytes(16).toString('base64')}`, `Origin: ${origin}`, '', '',
+            ].join('\r\n'));
+        });
+        const timer = setTimeout(() => { socket.destroy(); reject(new Error('Origin probe timed out.')); }, 15000);
+        let header = '';
+        socket.on('data', (chunk) => {
+            header += chunk.toString();
+            if (!header.includes('\r\n')) return;
+            clearTimeout(timer);
+            socket.destroy();
+            try { assert.equal(Number(header.split(' ')[1]), expected, `WebSocket origin ${origin}`); resolve(); }
+            catch (error) { reject(error); }
+        });
+        socket.on('error', () => { clearTimeout(timer); reject(new Error('WebSocket origin probe failed.')); });
+    });
+}
 try {
+    for (const origin of origins) {
+        const preflight = await fetch(`${http.replace(/\/$/, '')}/tables`, {
+            method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' },
+            signal: AbortSignal.timeout(15000),
+        });
+        assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+    }
     const password = randomUUID();
     const host = await post('/tables', { name: 'Backend smoke host', human_players: 2, password });
     await post(`/tables/${host.table}/join`, { name: 'Backend smoke guest', password: 'wrong' }, 403);
@@ -78,6 +112,8 @@ try {
     a.send({ type: 'next_hand', hand_number: 1 });
     do { state = await restored.next('state'); } while (state.hand_number !== 2);
     assert.equal(state.observation.dealer, 1);
+    for (const origin of origins) await checkSocketOrigin(guest, origin, 101);
+    if (origins.length) await checkSocketOrigin(guest, 'https://not-allowed.example', 403);
     console.log('AWS backend smoke test passed: create, password, join, sockets, full hand, reconnect and next hand.');
 } finally {
     for (const player of players) player.socket.close();
