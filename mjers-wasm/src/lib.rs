@@ -55,6 +55,19 @@ impl Game {
         Ok(Game { inner })
     }
 
+    /// Build an analysis-only game from a player's visible snapshot. Unknown
+    /// hands and wall tiles are sampled; this cannot recover the real deal.
+    #[wasm_bindgen(js_name = fromObservation)]
+    pub fn from_observation(
+        observation: ObservationValue,
+        seed: u64,
+    ) -> Result<Game, JsError> {
+        let snapshot: mjers_core::game::snapshot::Snapshot = decode(observation)?;
+        Ok(Game {
+            inner: snapshot.sample_game(seed).map_err(error)?,
+        })
+    }
+
     /// All seats whose decisions are needed before play continues.
     #[wasm_bindgen(js_name = toAct)]
     pub fn to_act(&self) -> Result<SeatsValue, JsError> {

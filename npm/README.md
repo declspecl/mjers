@@ -119,3 +119,9 @@ not configure authentication for GitHub Actions. See the
 
 Update the package version and npm lockfile together before creating a release
 tag. Building and testing locally do not publish anything.
+
+`Game.fromObservation(observation, seed)` constructs an analysis-only game from a
+seat's visible observation, including a remote multiplayer observation. Unknown
+hands and wall tiles are sampled; the actual game seed is unnecessary. Call
+`advise(observation.seat, options)` on it in a worker, then `free()` it. The sampled
+game is for analysis, not authoritative multiplayer play.

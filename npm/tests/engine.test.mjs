@@ -331,3 +331,22 @@ test("networks load from checkpoint bytes, evaluate, and play legal hands", () =
     assert.equal(current.planes, 58);
     current.free();
 });
+
+test("observation-only analysis preserves every seat's view without the real deal", () => {
+    for (const seat of [0, 1, 2, 3]) {
+        const original = new mjers.Game(42n, seat);
+        const observation = original.observe(seat);
+        const sampled = mjers.Game.fromObservation(observation, 999n);
+        try {
+            assert.deepEqual(sampled.observe(seat), observation);
+            assert.deepEqual(sampled.advise(seat, { samples: 0 }), original.advise(seat, { samples: 0 }));
+            assert.notDeepEqual(sampled.observe((seat + 1) % 4).hand, original.observe((seat + 1) % 4).hand);
+            const advice = sampled.advise(seat, { samples: 4, candidates: 2, seed: 7n });
+            assert.equal(advice.estimates.length, 2);
+            assert.deepEqual(original.observe(seat), observation);
+        } finally {
+            sampled.free();
+            original.free();
+        }
+    }
+});
