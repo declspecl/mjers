@@ -1,5 +1,5 @@
 import { expandCounts } from "../src/engine/tiles";
-import { advance, breakStackFor, createModel, reveal, SEATS, type TableModel, takeDraw, TILE_COUNT } from "../src/table/model";
+import { advance, createModel, reveal, SEATS, type TableModel, takeDraw, TILE_COUNT, wallBreak } from "../src/table/model";
 import createMjers from "@mjers/mjers";
 import type { Observation, Seat } from "@mjers/mjers/types";
 import assert from "node:assert/strict";
@@ -48,6 +48,11 @@ function check(model: TableModel, observation: Observation, label: string) {
         `${label}: your faces`,
     );
     assert.equal(ids.length + observation.wall_remaining, TILE_COUNT, `${label}: wall count`);
+    assert.equal(model.live.length + model.flowerWall.length, observation.wall_remaining, `${label}: live and flower walls`);
+    assert.ok(
+        model.flowerWall.every((id) => model.flowerSlots[id]! >= 0),
+        `${label}: flower wall slots`,
+    );
     assert.equal(model.pond.length, observation.discards.filter((discard) => !discard.claimed).length, `${label}: pond`);
 }
 
@@ -59,7 +64,7 @@ test("the table follows every tile through whole hands", async () => {
         const dealer = (hand % 4) as Seat;
         const game = new mjers.Game(seed, dealer);
         const bots = SEATS.map((seat) => new mjers.Bot(hand % 2 === 0 ? "efficiency" : "random", seed * 4n + BigInt(seat)));
-        let { model } = createModel(game.observe(0), breakStackFor(dealer, 3 + (hand % 16)), hand);
+        let { model } = createModel(game.observe(0), wallBreak(dealer, 3 + (hand % 16)), hand);
 
         try {
             check(model, game.observe(0), `hand ${hand} deal`);

@@ -1,6 +1,6 @@
 import { useGrader } from "../grading/use-grader";
 import { layout } from "../table/layout";
-import { advance, arrange, breakStackFor, createModel, reveal, SEATS, type TableModel, takeDraw } from "../table/model";
+import { advance, arrange, createModel, reveal, SEATS, type TableModel, takeDraw, wallBreak } from "../table/model";
 import { randomInt } from "../table/random";
 import { type Frame, type Rolls, setupFrames } from "../table/setup";
 import type { Mjers } from "./engine";
@@ -92,7 +92,7 @@ export function useTable(mjers: Mjers, settings: Settings) {
             SEATS.filter((seat) => seat !== HUMAN).map((seat) => [seat, new mjers.Bot("efficiency", seed * 4n + BigInt(seat))] as const),
         );
         const observation = game.observe(HUMAN);
-        const { model, plan } = createModel(observation, breakStackFor(dealer, sum(rolls.wall)), dice.random);
+        const { model, plan } = createModel(observation, wallBreak(dealer, sum(rolls.wall)), dice.random);
         const final = layout(model, { order: model.hands[0]!, drawn: null, selected: null });
         const animate = settings.opening && !prefersReducedMotion();
 

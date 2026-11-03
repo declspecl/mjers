@@ -1,5 +1,5 @@
-import { CENTER, type Face, lying, type Pose, stackOf, STAGE_WIDTH, TILE_HEIGHT, TILE_WIDTH, wallPose } from "./geometry";
-import { DEAD_TILES, SEATS, STACKS, type TableModel, TILE_COUNT } from "./model";
+import { CENTER, type Face, flowerWallPose, lying, type Pose, STAGE_WIDTH, TILE_HEIGHT, TILE_WIDTH, wallPose } from "./geometry";
+import { SEATS, type TableModel, TILE_COUNT } from "./model";
 import type { Seat, Tile } from "@mjers/mjers/types";
 
 /** How far a seat's hand sits from the middle of the table, along its edge. */
@@ -9,15 +9,11 @@ const ROW_ROOM = 680;
 const RACK_BASELINE = 1150;
 const RACK_SCALE = 1.95;
 
-/** Stacks counted back from the break: the replacement tiles sit apart from the live wall. */
-function tailIndex(model: TableModel, id: number): number {
-    return (((model.breakStack - 1 - stackOf(id)) % STACKS) + STACKS) % STACKS;
-}
+/** Where a tile waits before anyone takes it: in its wall, or in the flower wall once it has been turned down. */
+export function restingPose(model: TableModel, id: number): Pose {
+    const slot = model.flowerSlots[id] ?? -1;
 
-export function wallPoseIn(model: TableModel, id: number): Pose {
-    const dead = tailIndex(model, id) < Math.floor(model.back / 2) + DEAD_TILES / 2;
-
-    return wallPose(id, dead ? 10 : 0);
+    return slot === -1 ? wallPose(id) : flowerWallPose(model.setter, slot);
 }
 
 interface RowItem {
@@ -170,7 +166,7 @@ export function layout(model: TableModel, options: RackOptions): Pose[] {
         poses.set(id, pose);
     }
 
-    return Array.from({ length: TILE_COUNT }, (_, id) => poses.get(id) ?? wallPoseIn(model, id));
+    return Array.from({ length: TILE_COUNT }, (_, id) => poses.get(id) ?? restingPose(model, id));
 }
 
 export function faceOf(model: TableModel, id: number, pose: Pose): Tile | null {

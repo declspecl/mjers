@@ -1,5 +1,5 @@
 import { lying, type Pose, STACKS_PER_WALL, wallPose, WALL_RING } from "./geometry";
-import { layout, wallPoseIn } from "./layout";
+import { layout, restingPose } from "./layout";
 import { type DealPlan, type TableModel, TILE_COUNT } from "./model";
 import { nextRandom } from "./random";
 import type { Seat } from "@mjers/mjers/types";
@@ -149,13 +149,14 @@ export function setupFrames(model: TableModel, plan: DealPlan, rolls: Rolls, fin
         { poses: built, duration: 0, hold: 700, dice: { values: rolls.wall, rolling: false, roller: model.dealer }, dealer: model.dealer },
     );
 
-    const opened: TableModel = { ...model, back: 0 };
-    const broken = Array.from({ length: TILE_COUNT }, (_, id) => wallPoseIn(opened, id));
+    // The setter counts stacks from the front of their left wall and turns them down beside their right wall as the flower wall.
+    const turnedDown = Array.from({ length: TILE_COUNT }, (_, id) => restingPose(model, id));
 
     frames.push({
-        poses: broken,
-        duration: 300,
-        hold: 420,
+        poses: turnedDown,
+        duration: 520,
+        delays: turnedDown.map((pose, id) => (pose === built[id] || model.flowerSlots[id] === -1 ? 0 : (model.flowerSlots[id] ?? 0) * 18)),
+        hold: 520 + rolls.wall.reduce((sum, value) => sum + value, 0) * 36,
         dice: { values: rolls.wall, rolling: false, roller: model.dealer },
         dealer: model.dealer,
     });

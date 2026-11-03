@@ -86,3 +86,32 @@ export const WALL_CENTRES: { x: number; y: number }[] = Array.from({ length: 72 
 
     return { x: pose.x - CENTER, y: pose.y - CENTER };
 });
+
+/** The flower wall lies just inside the setter's right-corner wall, turned to run alongside it. Points are from the table centre. */
+const FLOWER_OFFSET = 50;
+
+export function pilePoint(setter: Seat, slot: number): { x: number; y: number } {
+    const along = (Math.floor(slot / 2) + 0.5) * STACK_PITCH;
+    const point = toStage(
+        setter,
+        WALL_START.x + WALL_STEP.x * along - WALL_STEP.y * FLOWER_OFFSET,
+        WALL_START.y + WALL_STEP.y * along + WALL_STEP.x * FLOWER_OFFSET,
+    );
+
+    return { x: point.x - CENTER, y: point.y - CENTER };
+}
+
+export function flowerWallPose(setter: Seat, slot: number): Pose {
+    const point = pilePoint(setter, slot);
+    const top = slot % 2 === 0;
+    const y = CENTER + point.y;
+
+    return {
+        x: CENTER + point.x,
+        y: y - (top ? LAYER_LIFT : 0),
+        rotation: seatAngle(setter) + WALL_TURN,
+        scale: 1,
+        face: "down",
+        z: (top ? 3000 : 2000) + Math.round(y),
+    };
+}

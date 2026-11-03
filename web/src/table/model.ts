@@ -1,5 +1,5 @@
 import { expandCounts, meldTiles } from "../engine/tiles";
-import { STACKS_PER_WALL, WALL_CENTRES, WALL_RING } from "./geometry";
+import { pilePoint, STACKS_PER_WALL, WALL_CENTRES, WALL_RING } from "./geometry";
 import { nextRandom, randomInt, shuffle } from "./random";
 import type { Hand, Meld, Observation, Seat, Tile } from "@mjers/mjers/types";
 
@@ -10,8 +10,10 @@ import type { Hand, Meld, Observation, Seat, Tile } from "@mjers/mjers/types";
 
 export const TILE_COUNT = 144;
 export const STACKS = 72;
-/** Replacement draws come from this many tiles at the tail of the wall. */
-export const DEAD_TILES = 16;
+/** The flower wall is padded back to this many stacks once it runs low. */
+const FLOWER_STACKS = 8;
+/** Below this many tiles the flower wall counts as low. */
+const FLOWER_LOW = 4;
 export const SEATS: readonly Seat[] = [0, 1, 2, 3];
 /** Tiles each seat takes per round of the deal, matching the engine. */
 const DEAL_ROUNDS = [4, 4, 4, 1] as const;
@@ -39,9 +41,16 @@ export interface DrawStep {
 
 export interface TableModel {
     dealer: Seat;
-    /** The ring index of the first live stack, just after the break. */
-    breakStack: number;
-    /** Tiles taken from the live end and from the tail. */
+    /** The seat that broke the wall; the flower wall lies beside its right-corner wall. */
+    setter: Seat;
+    /** Tiles still in the live wall, in the order they will be drawn. */
+    live: number[];
+    /** Tiles in the flower wall, in the order replacements are drawn. */
+    flowerWall: number[];
+    /** Each tile's place in the flower wall (even places are stack tops), or -1. Kept after a tile is drawn until it lands. */
+    flowerSlots: number[];
+    flowerNext: number;
+    /** Tiles the engine has taken from the live end and from the flower wall. */
     front: number;
     back: number;
     /** Faces you can see. Null for tiles that are face down to you. */
@@ -82,26 +91,71 @@ export function placedIds(model: TableModel): Set<number> {
 }
 
 /** The tile at the n-th draw from the live end: top of a stack, then the one underneath. */
-export function frontId(breakStack: number, n: number): number {
+function frontId(breakStack: number, n: number): number {
     return ((breakStack + Math.floor(n / 2)) % STACKS) * 2 + (n % 2);
 }
 
-/** The tile at the m-th draw from the tail, which runs back from the break. */
-export function backId(breakStack: number, m: number): number {
+/** The tile m places back from the break, which runs toward the front of the broken wall. */
+function backId(breakStack: number, m: number): number {
     return ((((breakStack - 1 - Math.floor(m / 2)) % STACKS) + STACKS) % STACKS) * 2 + (m % 2);
 }
 
+export interface WallBreak {
+    setter: Seat;
+    /** Stacks counted in from the front of the setter's left wall; they become the flower wall. */
+    counted: number;
+    /** The ring index of the first live stack, just after the counted ones. */
+    breakStack: number;
+}
+
 /**
- * Where the live wall starts. The dealer's roll counts seats counter-clockwise starting from the dealer as one, so a 5 comes back
- * to the dealer. That seat breaks its left wall: it counts that many stacks in from the front (the corner end) of the wall at its
- * left corner, and the live wall starts just after them.
+ * Where the wall breaks. The dealer's roll counts seats counter-clockwise starting from the dealer as one, so a 5 comes back to
+ * the dealer. That seat counts that many stacks in from the front (the corner end) of the wall at its left corner and turns them
+ * down beside its right-corner wall as the flower wall. The live wall starts just after them.
  */
-export function breakStackFor(dealer: Seat, total: number): number {
-    const setter = (dealer + total - 1) % 4;
+export function wallBreak(dealer: Seat, total: number): WallBreak {
+    const setter = ((dealer + total - 1) % 4) as Seat;
     const leftWall = ((setter + 3) % 4) as Seat;
     const ring = WALL_RING.indexOf(leftWall);
 
-    return (ring * STACKS_PER_WALL + total) % STACKS;
+    return { setter, counted: total, breakStack: (ring * STACKS_PER_WALL + total) % STACKS };
+}
+
+function toFlowerWall(model: TableModel, id: number) {
+    model.flowerWall.push(id);
+    model.flowerSlots[id] = model.flowerNext++;
+}
+
+/**
+ * Tops the flower wall back up to eight stacks from the back of the live wall. This is only how it looks: the engine keeps the last
+ * sixteen tiles for replacements however they are laid out.
+ */
+function padFlowerWall(model: TableModel) {
+    if (model.flowerWall.length === 0) {
+        model.flowerNext = 0;
+    }
+
+    model.flowerNext += model.flowerNext % 2;
+
+    while (model.flowerWall.length < FLOWER_STACKS * 2 - 1 && model.live.length >= 2) {
+        const bottom = model.live.pop()!;
+        const top = model.live.pop()!;
+
+        toFlowerWall(model, top);
+        toFlowerWall(model, bottom);
+    }
+}
+
+function drawFront(model: TableModel): number | undefined {
+    return model.live.shift() ?? model.flowerWall.pop();
+}
+
+function drawBack(model: TableModel): number | undefined {
+    if (model.flowerWall.length < FLOWER_LOW) {
+        padFlowerWall(model);
+    }
+
+    return model.flowerWall.shift() ?? model.live.pop();
 }
 
 export function seatOrder(dealer: Seat): Seat[] {
@@ -122,25 +176,17 @@ function frontCount(observation: Observation): number {
 }
 
 /** The table right after the deal, with every flower already replaced. */
-export function createModel(observation: Observation, breakStack: number, seed: number): { model: TableModel; plan: DealPlan } {
+export function createModel(observation: Observation, wall: WallBreak, seed: number): { model: TableModel; plan: DealPlan } {
     const dealer = observation.dealer;
     const order = seatOrder(dealer);
     const dealt: number[][] = [[], [], [], []];
-    let n = 0;
-
-    for (const take of DEAL_ROUNDS) {
-        for (const seat of order) {
-            for (let index = 0; index < take; index++) {
-                dealt[seat]!.push(frontId(breakStack, n++));
-            }
-        }
-    }
-
-    dealt[dealer]!.push(frontId(breakStack, n++));
-
     const model: TableModel = {
         dealer,
-        breakStack,
+        setter: wall.setter,
+        live: Array.from({ length: TILE_COUNT - wall.counted * 2 }, (_, n) => frontId(wall.breakStack, n)),
+        flowerWall: [],
+        flowerSlots: Array.from({ length: TILE_COUNT }, () => -1),
+        flowerNext: 0,
         front: frontCount(observation),
         back: backCount(observation),
         faces: Array.from({ length: TILE_COUNT }, () => null),
@@ -155,9 +201,23 @@ export function createModel(observation: Observation, breakStack: number, seed: 
         revealed: false,
         random: Math.trunc(seed),
     };
+
+    for (let m = 0; m < wall.counted * 2; m++) {
+        toFlowerWall(model, backId(wall.breakStack, m));
+    }
+
+    for (const take of DEAL_ROUNDS) {
+        for (const seat of order) {
+            for (let index = 0; index < take; index++) {
+                dealt[seat]!.push(drawFront(model)!);
+            }
+        }
+    }
+
+    dealt[dealer]!.push(drawFront(model)!);
+
     const flowers: number[][] = [[], [], [], []];
     const replacements: number[][] = [[], [], [], []];
-    let m = 0;
 
     for (const seat of order) {
         const player = observation.players[seat];
@@ -165,7 +225,7 @@ export function createModel(observation: Observation, breakStack: number, seed: 
         const picked = shuffle(model, dealt[seat]!).slice(0, count);
 
         flowers[seat] = picked;
-        replacements[seat] = Array.from({ length: count }, () => backId(breakStack, m++));
+        replacements[seat] = Array.from({ length: count }, () => drawBack(model)!);
         model.bonus[seat] = picked;
         for (const [index, id] of picked.entries()) {
             model.faces[id] = player.bonus[index] ?? null;
@@ -280,7 +340,9 @@ function toss(model: TableModel, id: number, seat: Seat): PondTile {
         const x = localX * Math.cos(angle) - localY * Math.sin(angle);
         const y = localX * Math.sin(angle) + localY * Math.cos(angle);
 
-        if (WALL_CENTRES.some((stack) => Math.hypot(stack.x - x, stack.y - y) < WALL_CLEARANCE)) {
+        const flowers = model.flowerWall.map((tile) => pilePoint(model.setter, model.flowerSlots[tile]!));
+
+        if ([...WALL_CENTRES, ...flowers].some((stack) => Math.hypot(stack.x - x, stack.y - y) < WALL_CLEARANCE)) {
             continue;
         }
 
@@ -410,14 +472,8 @@ export function advance(previous: TableModel, observation: Observation, context:
     const front = frontCount(observation);
     const back = backCount(observation);
     const drawnIds = [
-        ...Array.from({ length: Math.max(0, front - model.front) }, (_, k) => ({
-            id: frontId(model.breakStack, model.front + k),
-            source: "front" as const,
-        })),
-        ...Array.from({ length: Math.max(0, back - model.back) }, (_, k) => ({
-            id: backId(model.breakStack, model.back + k),
-            source: "back" as const,
-        })),
+        ...Array.from({ length: Math.max(0, front - model.front) }, () => ({ id: drawFront(model)!, source: "front" as const })),
+        ...Array.from({ length: Math.max(0, back - model.back) }, () => ({ id: drawBack(model)!, source: "back" as const })),
     ];
 
     model.front = Math.max(model.front, front);
