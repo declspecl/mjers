@@ -1,0 +1,20 @@
+[package]
+name = "mjers-dev-server"
+description = "local multiplayer HTTP and WebSocket server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+mjers-table = { path = "../table" }
+mjers-dynamodb = { path = "../dynamodb" }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "signal"] }
+getrandom = "0.4"
+argon2 = "0.5"
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "mjers-table"
+description = "pure multiplayer table state and wire protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-core.workspace = true
+serde.workspace = true
+sha2 = "0.10"
+subtle = "2.6"
+argon2 = { version = "0.5", default-features = false, features = ["alloc", "password-hash"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

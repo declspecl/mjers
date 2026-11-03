@@ -2,7 +2,6 @@
 
 mod analysis;
 mod neural;
-mod observation;
 mod types;
 
 use std::sync::Arc;
@@ -75,7 +74,7 @@ impl Game {
         &self,
         player: usize,
     ) -> Result<ObservationValue, JsError> {
-        encode(&observation::Snapshot::new(&self.inner, seat(player)?))
+        encode(&mjers_core::game::snapshot::Snapshot::new(&self.inner, seat(player)?))
     }
 
     /// Apply one legal action. Invalid input throws a JavaScript Error.

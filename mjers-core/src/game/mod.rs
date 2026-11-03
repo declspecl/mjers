@@ -8,6 +8,7 @@ pub mod matches;
 pub mod observation;
 pub mod position;
 pub mod rng;
+pub mod snapshot;
 #[cfg(test)]
 pub(crate) mod testing;
 pub mod trace;
