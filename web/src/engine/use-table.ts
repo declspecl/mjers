@@ -140,11 +140,11 @@ export function useTable(mjers: Mjers, settings: Settings) {
 
             try {
                 handle.game.apply(seat, action);
-                mirror(seat, action);
-
                 if (seat === HUMAN) {
                     choose(state.hand, state.moves, action);
                 }
+
+                mirror(seat, action);
 
                 const observation = handle.game.observe(HUMAN);
                 const over = handle.game.isOver();

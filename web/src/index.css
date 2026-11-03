@@ -389,7 +389,7 @@ main > .problem {
     animation: verdict 220ms ease-out;
 }
 
-[data-grade="perfect"] {
+[data-grade="excellent"] {
     color: var(--grade-perfect);
 }
 
@@ -401,6 +401,7 @@ main > .problem {
     color: var(--grade-okay);
 }
 
+[data-grade="mistake"],
 [data-grade="bad"] {
     color: var(--grade-bad);
 }
@@ -639,4 +640,8 @@ button.icon svg {
     .grade-toast {
         animation: none;
     }
+}
+
+[data-grade="unclear"] {
+    color: var(--grade-okay);
 }

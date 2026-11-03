@@ -1,6 +1,6 @@
-import { grade, type GradeResult } from "./grade";
+import type { GradeResult } from "./grade";
 import type { GraderMessage, GraderReply } from "./protocol";
-import type { Action, Advice, Seat } from "@mjers/mjers/types";
+import type { Action, Seat } from "@mjers/mjers/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface GradedMove {
@@ -10,34 +10,17 @@ export interface GradedMove {
     result: GradeResult;
 }
 
-/** Playouts per candidate move: enough to separate clear mistakes, quick enough to answer within a second or so. */
-const SAMPLES = 48;
-
 function key(hand: number, decision: number): string {
     return `${hand}:${decision}`;
 }
 
-/** Runs the grading engine in a worker that mirrors the hand, and grades your moves once its advice arrives. */
+/** Mirrors the hand in a worker; analyze the chosen move before replaying it. */
 export function useGrader() {
     const worker = useRef<Worker>(undefined);
-    const advice = useRef(new Map<string, Advice>());
-    const chosen = useRef(new Map<string, Action>());
-    const requested = useRef(new Set<string>());
+    const session = useRef(0);
+    const requested = useRef(new Map<string, number>());
     const [graded, setGraded] = useState<GradedMove[]>([]);
     const [failure, setFailure] = useState<string>();
-
-    const settle = useCallback((hand: number, decision: number) => {
-        const id = key(hand, decision);
-        const found = advice.current.get(id);
-        const action = chosen.current.get(id);
-
-        if (!found || action === undefined) {
-            return;
-        }
-
-        chosen.current.delete(id);
-        setGraded((list) => [...list, { hand, decision, action, result: grade(found, action) }]);
-    }, []);
 
     useEffect(() => {
         const created = new Worker(new URL("grader.worker.ts", import.meta.url), { type: "module" });
@@ -45,14 +28,17 @@ export function useGrader() {
         created.addEventListener("message", (event: MessageEvent<GraderReply>) => {
             const reply = event.data;
 
+            if (reply.session !== session.current) {
+                return;
+            }
+
             if (reply.type === "failed") {
                 setFailure(reply.error);
 
                 return;
             }
 
-            advice.current.set(key(reply.hand, reply.decision), reply.advice);
-            settle(reply.hand, reply.decision);
+            setGraded((list) => [...list, { hand: reply.hand, decision: reply.decision, action: reply.action, result: reply.result }]);
         });
         worker.current = created;
 
@@ -60,48 +46,41 @@ export function useGrader() {
             created.terminate();
             worker.current = undefined;
         };
-    }, [settle]);
+    }, []);
 
     const post = useCallback((message: GraderMessage) => worker.current?.postMessage(message), []);
 
     const start = useCallback(
         (seed: bigint, dealer: Seat) => {
-            advice.current.clear();
-            chosen.current.clear();
+            session.current += 1;
             requested.current.clear();
             setGraded([]);
-            post({ type: "start", seed, dealer });
+            setFailure(undefined);
+            post({ type: "start", session: session.current, seed, dealer });
         },
         [post],
     );
 
-    const apply = useCallback((seat: Seat, action: Action) => post({ type: "apply", seat, action }), [post]);
+    const apply = useCallback((seat: Seat, action: Action) => post({ type: "apply", session: session.current, seat, action }), [post]);
 
-    const request = useCallback(
-        (hand: number, decision: number, candidates: number) => {
-            const id = key(hand, decision);
+    const request = useCallback((hand: number, decision: number, candidates: number) => {
+        requested.current.set(key(hand, decision), candidates);
+    }, []);
 
-            if (requested.current.has(id)) {
-                return;
-            }
-
-            requested.current.add(id);
-            post({ type: "grade", hand, decision, samples: SAMPLES, candidates });
-        },
-        [post],
-    );
-
-    /** Records your move for a decision that was sent for grading; the grade appears when the advice is ready. */
+    /** Must be posted before the chosen action is applied to the worker's mirror. */
     const choose = useCallback(
         (hand: number, decision: number, action: Action) => {
-            if (!requested.current.has(key(hand, decision))) {
+            const id = key(hand, decision);
+            const candidates = requested.current.get(id);
+
+            if (candidates === undefined) {
                 return;
             }
 
-            chosen.current.set(key(hand, decision), action);
-            settle(hand, decision);
+            requested.current.delete(id);
+            post({ type: "grade", session: session.current, hand, decision, candidates, chosen: action });
         },
-        [settle],
+        [post],
     );
 
     return { start, apply, request, choose, graded, failure };

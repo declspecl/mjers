@@ -1,6 +1,6 @@
 import { seatName, tileName } from "../engine/names";
 import type { TableState } from "../engine/use-table";
-import { GRADES } from "../grading/grade";
+import { GRADES, sameAction } from "../grading/grade";
 import type { GradedMove } from "../grading/use-grader";
 import type { Action, Advice, Seat } from "@mjers/mjers/types";
 
@@ -127,8 +127,8 @@ export function SidePanel({ table, advice, error, graded, feedback, gradingFailu
                             <p>
                                 <strong data-grade={latest.result.grade.toLowerCase()}>{latest.result.grade}</strong> for{" "}
                                 {lowerFirst(actionLabel(latest.action, undefined))}.
-                                {latest.result.grade !== "Perfect" && (
-                                    <> The engine preferred {lowerFirst(actionLabel(latest.result.best, undefined))}.</>
+                                {!sameAction(latest.action, latest.result.best) && (
+                                    <> The engine suggested {lowerFirst(actionLabel(latest.result.best, undefined))}.</>
                                 )}
                             </p>
                             <p className="muted">{latest.result.reason}</p>

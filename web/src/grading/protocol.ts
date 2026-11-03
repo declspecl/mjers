@@ -1,15 +1,21 @@
-import type { Action, Advice, Seat } from "@mjers/mjers/types";
+import type { GradeResult } from "./grade";
+import type { Action, Seat } from "@mjers/mjers/types";
 
 export interface GradeRequest {
     type: "grade";
+    session: number;
     hand: number;
     /** Moves applied before this decision, which names it within the hand. */
     decision: number;
-    samples: number;
     candidates: number;
+    chosen: Action;
 }
 
-export type GraderMessage = { type: "start"; seed: bigint; dealer: Seat } | { type: "apply"; seat: Seat; action: Action } | GradeRequest;
+export type GraderMessage =
+    | { type: "start"; session: number; seed: bigint; dealer: Seat }
+    | { type: "apply"; session: number; seat: Seat; action: Action }
+    | GradeRequest;
 
 export type GraderReply =
-    { type: "advice"; hand: number; decision: number; advice: Advice } | { type: "failed"; hand: number; decision: number; error: string };
+    | { type: "graded"; session: number; hand: number; decision: number; action: Action; result: GradeResult }
+    | { type: "failed"; session: number; hand: number; decision: number; error: string };

@@ -168,8 +168,8 @@ catalogs:
       specifier: ^9.39.1
       version: 9.39.5
     '@mjers/mjers':
-      specifier: ^0.1.0
-      version: 0.1.0
+      specifier: ^0.1.1
+      version: 0.1.1
     '@trivago/prettier-plugin-sort-imports':
       specifier: ^6.0.2
       version: 6.0.2
@@ -234,7 +234,7 @@ importers:
     dependencies:
       '@mjers/mjers':
         specifier: 'catalog:'
-        version: 0.1.0
+        version: 0.1.1
       react:
         specifier: 'catalog:'
         version: 19.3.1
@@ -787,8 +787,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@mjers/mjers@0.1.0':
-    resolution: {integrity: sha512-y5uGcZhYS5S+J6vCAKL/cLQD6wwbdQwTaTiKMvj2JfPu/Ru5gys/jTE8RIcaYysXlGh/lSGS4RRwPgErMnUwoQ==}
+  '@mjers/mjers@0.1.1':
+    resolution: {integrity: sha512-CDn7wSE+OS/3LiBtW/EL0bveghfvgOEB5UVEXRwnuTqfPZJ/XILc/KC4Gge8NX2dbKr6B+he3J754voUPyLGPw==}
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -2582,7 +2582,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@mjers/mjers@0.1.0': {}
+  '@mjers/mjers@0.1.1': {}
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:

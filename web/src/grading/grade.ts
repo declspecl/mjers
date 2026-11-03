@@ -1,14 +1,17 @@
-import type { Action, Advice, Assessment, Estimate } from "@mjers/mjers/types";
+import type { Action, Advice } from "@mjers/mjers/types";
 
-export const GRADES = ["Perfect", "Good", "Okay", "Bad", "Terrible"] as const;
+export const GRADES = ["Excellent", "Good", "Okay", "Bad", "Terrible", "Mistake", "Unclear"] as const;
 export type Grade = (typeof GRADES)[number];
 
 export interface GradeResult {
     grade: Grade;
-    /** The move the engine liked best. */
+    /** The move with the highest estimated return, or the advisor's fallback. */
     best: Action;
-    /** Expected units lost against the best move, after allowing for playout noise. Undefined without playouts. */
+    /** Estimated expected units lost against the best simulated move, without subtracting noise. */
     loss?: number;
+    lossRange?: [number, number];
+    /** Simulation precision, not a guarantee that the rollout policy is correct. */
+    certainty?: "resolved" | "severity" | "unresolved";
     reason: string;
 }
 
@@ -16,7 +19,7 @@ export function sameAction(a: Action, b: Action): boolean {
     return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Units of expected loss, beyond noise, that each grade allows. */
+/** Provisional loss thresholds in settlement units; these still need calibration against reviewed positions. */
 const LOSS_STEPS = [0.15, 0.4, 0.8, 1.5];
 
 function byLoss(loss: number): number {
@@ -25,72 +28,86 @@ function byLoss(loss: number): number {
     return index === -1 ? 4 : index;
 }
 
-/** The instant ranking: how far the move set the hand back and how many winning chances it gave up. */
-function byShape(chosen: Assessment, best: Assessment): number {
-    const steps = chosen.shanten - best.shanten;
-
-    if (steps >= 2) {
-        return 4;
-    }
-
-    if (steps === 1) {
-        return 3;
-    }
-
-    const kept = best.live_improving === 0 ? 1 : chosen.live_improving / best.live_improving;
-
-    if (kept >= 0.9 && chosen.danger <= best.danger + 0.05) {
-        return 0;
-    }
-
-    return kept >= 0.7 ? 1 : 2;
-}
-
 function isWin(action: Action): boolean {
     return action === "win" || action === "self_draw_win";
 }
 
 /**
- * Grades a move against the advisor. Playout estimates are paired, so the loss is the gap in mean units to the best candidate,
- * shrunk by one standard error so a coin flip between near-equal moves is not called a mistake. The instant ranking catches
- * moves that break the hand's shape, and either signal saying the move was fine is enough.
+ * Grade settlement regret from observation-only simulations. Prefer direct paired
+ * errors; older engines use a conservative sum of baseline-relative errors.
+ * Three standard errors allow more caution for multiple candidates and repeated
+ * analysis. These ranges remain approximate, not calibrated confidence intervals.
  */
 export function grade(advice: Advice, chosen: Action): GradeResult {
-    const best = advice.recommended;
-
-    if (sameAction(best, chosen)) {
-        return { grade: "Perfect", best, loss: 0, reason: "The engine's choice." };
-    }
-
     const winAvailable = advice.ranked.find((entry) => isWin(entry.action));
 
     if (winAvailable && !isWin(chosen)) {
         return { grade: "Terrible", best: winAvailable.action, reason: "You passed up a winning hand." };
     }
 
-    const estimates: Estimate[] = advice.estimates;
+    if (isWin(chosen) && winAvailable) {
+        return { grade: "Excellent", best: chosen, reason: "You took the winning hand." };
+    }
+
+    if (advice.ranked.length === 1 && sameAction(advice.ranked[0]!.action, chosen)) {
+        return { grade: "Unclear", best: chosen, reason: "Only one legal move; there was no decision to grade." };
+    }
+
+    const estimates = advice.estimates;
     const mine = estimates.find((entry) => sameAction(entry.action, chosen));
-    const top = estimates.reduce<Estimate | undefined>(
+    const top = estimates.reduce<(typeof estimates)[number] | undefined>(
         (leader, entry) => (leader === undefined || entry.difference > leader.difference ? entry : leader),
         undefined,
     );
-    const rankedBest = advice.ranked[0];
-    const rankedMine = advice.ranked.find((entry) => sameAction(entry.action, chosen));
-    const shape = rankedBest && rankedMine ? byShape(rankedMine, rankedBest) : 2;
+    const complete = advice.ranked.every((entry) => estimates.some((estimate) => sameAction(estimate.action, entry.action)));
 
-    if (mine && top) {
-        const gap = top.difference - mine.difference;
-        const noise = Math.max(mine.difference_stderr, top.difference_stderr);
-        const loss = Math.max(0, gap - noise);
-        const level = Math.min(byLoss(loss), shape);
-
-        return {
-            grade: GRADES[level]!,
-            best: top.action,
-            loss,
-            reason: `About ${gap.toFixed(2)} units worse on average over ${mine.samples} playouts.`,
-        };
+    if (
+        !mine ||
+        !top ||
+        !complete ||
+        estimates.some(
+            (entry) =>
+                entry.samples < 2 ||
+                !Number.isFinite(entry.difference) ||
+                !Number.isFinite(entry.difference_stderr) ||
+                entry.difference_stderr < 0,
+        )
+    ) {
+        return { grade: "Unclear", best: advice.recommended, reason: "Not enough simulation evidence to grade this move." };
     }
 
-    return { grade: GRADES[shape]!, best, reason: "Judged by hand shape alone." };
+    let lower = 0;
+    let upper = 0;
+
+    for (const alternative of estimates) {
+        if (sameAction(alternative.action, chosen)) {
+            continue;
+        }
+
+        const paired = alternative.comparisons?.find((entry) => sameAction(entry.action, chosen));
+        const valid = paired && Number.isFinite(paired.difference) && Number.isFinite(paired.stderr) && paired.stderr >= 0;
+        const gap = valid ? paired.difference : alternative.difference - mine.difference;
+        const margin = 3 * (valid ? paired.stderr : alternative.difference_stderr + mine.difference_stderr);
+        lower = Math.max(lower, gap - margin);
+        upper = Math.max(upper, gap + margin);
+    }
+
+    const loss = Math.max(0, top.difference - mine.difference);
+    const level = byLoss(lower);
+    const certain = level === byLoss(upper);
+    const mistake = lower > LOSS_STEPS[1]!;
+    const qualification = certain
+        ? ""
+        : mistake
+          ? " This move loses value, but its exact severity is uncertain."
+          : " More analysis is needed to establish the quality of this move.";
+
+    return {
+        grade: certain ? GRADES[level]! : mistake ? "Mistake" : "Unclear",
+        certainty: certain ? "resolved" : mistake ? "severity" : "unresolved",
+        lossRange: [lower, upper],
+        best: top.action,
+        loss,
+        reason: `Estimated loss: ${loss.toFixed(2)} units per hand; approximate range ${lower.toFixed(2)}–${upper.toFixed(2)} over ${mine.samples} playouts.${qualification}`,
+    };
 }

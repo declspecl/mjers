@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { analyzeMove } from "./analyze";
 import type { GradeRequest, GraderMessage } from "./protocol";
 import createMjers from "@mjers/mjers";
 
@@ -33,11 +34,28 @@ async function handle(message: GraderMessage) {
     const request: GradeRequest = message;
 
     try {
-        const advice = game.advise(0, { samples: request.samples, candidates: request.candidates, seed: BigInt(request.decision) });
+        const current = game;
+        const result = analyzeMove(
+            (samples) => current.advise(0, { samples, candidates: request.candidates, seed: BigInt(request.decision) }),
+            request.chosen,
+        );
 
-        scope.postMessage({ type: "advice", decision: request.decision, hand: request.hand, advice });
+        scope.postMessage({
+            type: "graded",
+            session: request.session,
+            decision: request.decision,
+            hand: request.hand,
+            action: request.chosen,
+            result,
+        });
     } catch (error) {
-        scope.postMessage({ type: "failed", decision: request.decision, hand: request.hand, error: String(error) });
+        scope.postMessage({
+            type: "failed",
+            session: request.session,
+            decision: request.decision,
+            hand: request.hand,
+            error: String(error),
+        });
     }
 }
 
@@ -45,6 +63,6 @@ scope.addEventListener("message", (event: MessageEvent<GraderMessage>) => {
     queue = queue
         .then(() => handle(event.data))
         .catch((error: unknown) => {
-            scope.postMessage({ type: "failed", decision: -1, hand: -1, error: String(error) });
+            scope.postMessage({ type: "failed", session: event.data.session, decision: -1, hand: -1, error: String(error) });
         });
 });
