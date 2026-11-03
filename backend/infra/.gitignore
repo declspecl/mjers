@@ -1,0 +1,6 @@
+node_modules/
+cdk.out/
+.cache/
+.env
+.env.*
+!.env.example

@@ -108,7 +108,8 @@ fn illegal_stale_and_duplicate_actions_change_nothing() {
 #[test]
 fn series_rotates_dealer_preserves_history_and_settles_once() {
     let mut table = room(1);
-    for number in 1..=5 {
+    let mut expected = [0; 4];
+    for number in 1..=10 {
         if number == 1 {
             start(&mut table, 10);
         } else {
@@ -117,12 +118,10 @@ fn series_rotates_dealer_preserves_history_and_settles_once() {
         assert_eq!(table.hand_number(), number);
         assert_eq!(table.game().unwrap().dealer(), Seat::ALL[(number as usize - 1) % 4]);
         finish(&mut table);
-        let expected: [i32; 4] = table.history.iter().chain(table.hand.iter()).fold([0; 4], |mut total, hand| {
-            for (score, delta) in total.iter_mut().zip(hand.replay().unwrap().settlement().unwrap().total()) {
-                *score += delta;
-            }
-            total
-        });
+        for (score, delta) in expected.iter_mut().zip(table.game().unwrap().settlement().unwrap().total()) {
+            *score += delta;
+        }
+        assert!(table.history.len() <= 4);
         assert_eq!(table.scores, expected);
         assert_eq!(table.scores.iter().sum::<i32>(), 0);
         assert_eq!(table.messages(Seat::ALL[0], [false; 4]).unwrap().len(), 2);
@@ -192,7 +191,12 @@ fn two_humans_finish_hands_with_safe_per_seat_messages_and_events() {
             let obs = game.observe(seat);
             let chosen = BotPreset::Efficiency.spec().build(0).act(&obs, &obs.legal_actions());
             let change = table.handle(seat, action(&table, seat, chosen), 0).unwrap();
-            let events = serde_json::to_value(ServerMessage::Events { events: change.events }).unwrap();
+            let events = serde_json::to_value(ServerMessage::Events {
+                version: table.version(),
+                hand_number: table.hand_number(),
+                events: change.events,
+            })
+            .unwrap();
             assert_public(&events);
             for event in events["events"].as_array().unwrap() {
                 if event["event"] == "draw" {
@@ -286,4 +290,38 @@ fn protocol_examples_round_trip_and_hints_do_not_mutate() {
     assert_eq!(serde_json::to_value(hint).unwrap()["type"], "hint");
     assert_eq!(serde_json::to_value(&table).unwrap(), before);
     assert!(table.read(Seat::ALL[0], ClientMessage::Hint { samples: 200 }).is_err());
+}
+
+#[test]
+fn autoplay_keeps_the_human_identity_and_does_not_double_settle() {
+    let mut table = room(1);
+    start(&mut table, 7);
+    table
+        .handle(
+            Seat::ALL[0],
+            ClientMessage::Autoplay {
+                enabled: true,
+                hand_number: 1,
+                steps_seen: 0,
+            },
+            0,
+        )
+        .unwrap();
+    assert!(table.game().unwrap().is_over());
+    let scores = table.scores;
+    assert_eq!(table.authenticate("host-secret").unwrap(), Seat::ALL[0]);
+    table
+        .handle(
+            Seat::ALL[0],
+            ClientMessage::Autoplay {
+                enabled: false,
+                hand_number: 1,
+                steps_seen: table.steps(),
+            },
+            0,
+        )
+        .unwrap();
+    assert_eq!(table.scores, scores);
+    table.handle(Seat::ALL[0], ClientMessage::NextHand { hand_number: 1 }, 99).unwrap();
+    assert!(!table.game().unwrap().is_over());
 }

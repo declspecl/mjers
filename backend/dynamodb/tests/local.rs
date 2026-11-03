@@ -121,6 +121,24 @@ async fn dynamodb_persistence_and_conditional_writes() {
         assert_eq!(messages[0]["observation"], serde_json::to_value(mjers_core::game::snapshot::Snapshot::new(&game, seat)).unwrap());
     }
 
+    // TTL deletion is asynchronous, so readers and conditional writes enforce
+    // expiry immediately rather than relying on DynamoDB's background cleanup.
+    let mut expired = room("expired", 2);
+    store.create(&expired).await.unwrap();
+    client
+        .update_item()
+        .table_name(&name)
+        .key("table_id", AttributeValue::S("expired".into()))
+        .update_expression("SET #ttl = :ttl")
+        .expression_attribute_names("#ttl", "ttl")
+        .expression_attribute_values(":ttl", AttributeValue::N("0".into()))
+        .send()
+        .await
+        .unwrap();
+    assert!(store.load("expired").await.unwrap().is_none());
+    expired.join("Friend".into(), "token", None).unwrap();
+    assert!(matches!(store.save(&expired, 0).await, Err(StoreError::Conflict)));
+
     // Read failures and malformed data never turn into an empty/default room.
     client
         .update_item()

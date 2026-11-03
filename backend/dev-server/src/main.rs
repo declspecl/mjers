@@ -4,11 +4,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use argon2::password_hash::SaltString;
-use argon2::{
-    Argon2,
-    PasswordHasher,
-};
 use axum::extract::ws::{
     Message,
     WebSocket,
@@ -35,9 +30,15 @@ use axum::{
 };
 use mjers_core::rules::seat::Seat;
 use mjers_dynamodb::{
-    StoreError,
     TableStore,
     local,
+};
+use mjers_service::{
+    CreateRoom,
+    JoinRoom,
+    Joined,
+    RoomService,
+    ServiceError,
 };
 use mjers_table::protocol::{
     ClientMessage,
@@ -46,14 +47,10 @@ use mjers_table::protocol::{
     ServerMessage,
 };
 use mjers_table::{
-    BotPreset,
     Table,
     TableError,
 };
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::Deserialize;
 use tokio::sync::{
     Mutex,
     mpsc,
@@ -62,7 +59,7 @@ use tokio::sync::{
 
 #[derive(Clone)]
 struct AppState {
-    store: TableStore,
+    service: RoomService,
     rooms: Arc<Mutex<HashMap<String, Arc<Mutex<Room>>>>>,
 }
 struct Room {
@@ -95,42 +92,8 @@ impl AppState {
         &self,
         id: &str,
     ) -> Result<Table, ApiError> {
-        self.store.load(id).await?.ok_or_else(|| {
-            ApiError(
-                StatusCode::NOT_FOUND,
-                TableError {
-                    code: ErrorCode::InvalidRoom,
-                    message: "Room not found. Check the invite code.".into(),
-                },
-            )
-        })
+        self.service.load(id).await.map_err(Into::into)
     }
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CreateRoom {
-    name: String,
-    #[serde(default = "default_humans")]
-    human_players: u8,
-    password: Option<String>,
-    #[serde(default)]
-    bot: BotPreset,
-}
-fn default_humans() -> u8 {
-    2
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct JoinRoom {
-    name: String,
-    password: Option<String>,
-}
-#[derive(Serialize)]
-struct Joined {
-    table: String,
-    seat_token: String,
-    seat: Seat,
-    join_path: String,
 }
 #[derive(Deserialize)]
 struct Connect {
@@ -173,20 +136,10 @@ fn invalid(message: &str) -> ApiError {
     )
 }
 
-impl From<StoreError> for ApiError {
-    fn from(error: StoreError) -> Self {
-        eprintln!("Room storage operation failed: {error}");
-        internal()
+impl From<ServiceError> for ApiError {
+    fn from(error: ServiceError) -> Self {
+        Self(StatusCode::from_u16(error.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR), error.client_error())
     }
-}
-fn busy() -> ApiError {
-    ApiError(
-        StatusCode::SERVICE_UNAVAILABLE,
-        TableError {
-            code: ErrorCode::Internal,
-            message: "The room is busy. Try again.".into(),
-        },
-    )
 }
 
 #[tokio::main]
@@ -198,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = local::client(&endpoint);
     local::ensure_table(&client, &table_name).await?;
     let state = AppState {
-        store: TableStore::new(client, table_name),
+        service: RoomService::new(TableStore::new(client, table_name)),
         rooms: Arc::default(),
     };
     let app = Router::new()
@@ -222,30 +175,7 @@ async fn create(
     State(state): State<AppState>,
     Json(input): Json<CreateRoom>,
 ) -> Result<Json<Joined>, ApiError> {
-    let password = input.password.clone();
-    let password_hash = tokio::task::spawn_blocking(move || {
-        password
-            .map(|password| {
-                check_password(&password)?;
-                let salt = SaltString::encode_b64(&random::<16>()?).map_err(|_| internal())?;
-                Argon2::default().hash_password(password.as_bytes(), &salt).map(|hash| hash.to_string()).map_err(|_| internal())
-            })
-            .transpose()
-    })
-    .await
-    .map_err(|_| internal())??;
-    let token = token()?;
-    for _ in 0..4 {
-        let alphabet = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-        let id: String = random::<6>()?.iter().map(|byte| alphabet[(*byte as usize) % alphabet.len()] as char).collect();
-        let table = Table::new(id.clone(), input.name.clone(), &token, input.human_players, password_hash.clone(), input.bot)?;
-        match state.store.create(&table).await {
-            Ok(()) => return Ok(Json(joined(id, token, Seat::ALL[0]))),
-            Err(StoreError::Conflict) => continue,
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Err(busy())
+    Ok(Json(state.service.create(input).await?))
 }
 
 async fn join(
@@ -253,60 +183,11 @@ async fn join(
     Path(id): Path<String>,
     Json(input): Json<JoinRoom>,
 ) -> Result<Json<Joined>, ApiError> {
-    if let Some(password) = &input.password {
-        check_password(password)?;
-    }
-    let token = token()?;
     let runtime = state.room(&id).await;
     let room = runtime.lock().await;
-    for _ in 0..4 {
-        let mut table = state.load(&id).await?;
-        let version = table.version();
-        let (name, password, seat_token) = (input.name.clone(), input.password.clone(), token.clone());
-        // Argon2 verification stays off the async runtime.
-        let (table, seat) = tokio::task::spawn_blocking(move || {
-            let seat = table.join(name, &seat_token, password.as_deref())?;
-            Ok::<_, TableError>((table, seat))
-        })
-        .await
-        .map_err(|_| internal())??;
-        match state.store.save(&table, version).await {
-            Ok(()) => {
-                room.broadcast(&table, &[])?;
-                return Ok(Json(joined(id, token, seat)));
-            },
-            Err(StoreError::Conflict) => continue,
-            Err(error) => return Err(error.into()),
-        }
-    }
-    Err(busy())
-}
-fn joined(
-    id: String,
-    token: String,
-    seat: Seat,
-) -> Joined {
-    Joined {
-        join_path: format!("/?room={id}"),
-        table: id,
-        seat_token: token,
-        seat,
-    }
-}
-fn check_password(password: &str) -> Result<(), ApiError> {
-    if password.len() > 128 { Err(invalid("Use a password of at most 128 bytes.")) } else { Ok(()) }
-}
-fn random<const N: usize>() -> Result<[u8; N], ApiError> {
-    let mut bytes = [0; N];
-    getrandom::fill(&mut bytes).map_err(|_| internal())?;
-    Ok(bytes)
-}
-fn token() -> Result<String, ApiError> {
-    use std::fmt::Write;
-    random::<32>()?.iter().try_fold(String::with_capacity(64), |mut text, byte| {
-        write!(text, "{byte:02x}").map_err(|_| internal())?;
-        Ok(text)
-    })
+    let (joined, table) = state.service.join(&id, input).await?;
+    room.broadcast(&table, &[])?;
+    Ok(Json(joined))
 }
 
 async fn connect(
@@ -393,29 +274,25 @@ async fn process(
     if !room.active(seat, id) {
         return Ok(());
     }
-    let seed = u64::from_le_bytes(random::<8>()?);
-    for _ in 0..4 {
-        let mut table = state.load(table_id).await?;
-        if matches!(message, ClientMessage::Ping | ClientMessage::Hint { .. }) {
-            return room.send(seat, &table.read(seat, message)?);
-        }
-        let version = table.version();
-        match table.handle(seat, message.clone(), seed) {
-            Ok(change) => match state.store.save(&table, version).await {
-                Ok(()) => return room.broadcast(&table, &change.events),
-                Err(StoreError::Conflict) => continue,
-                Err(error) => return Err(error.into()),
-            },
-            Err(error) => {
-                room.send(seat, &error.message())?;
-                if error.code == ErrorCode::Stale {
-                    room.sync(&table, seat)?;
-                }
-                return Ok(());
-            },
-        }
+    if matches!(message, ClientMessage::Sync) {
+        let table = state.load(table_id).await?;
+        return room.sync(&table, seat);
     }
-    Err(busy())
+    if matches!(message, ClientMessage::Ping | ClientMessage::Hint { .. }) {
+        let table = state.load(table_id).await?;
+        return room.send(seat, &table.read(seat, message)?);
+    }
+    match state.service.command(table_id, seat, message).await {
+        Ok((table, events)) => room.broadcast(&table, &events),
+        Err(error) => {
+            let error = error.client_error();
+            room.send(seat, &error.message())?;
+            if error.code == ErrorCode::Stale {
+                room.sync(&state.load(table_id).await?, seat)?;
+            }
+            Ok(())
+        },
+    }
 }
 impl Room {
     fn active(
@@ -457,7 +334,14 @@ impl Room {
         for seat in Seat::ALL {
             if self.sessions[seat.index()].is_some() {
                 if !events.is_empty() {
-                    self.send(seat, &ServerMessage::Events { events: events.to_vec() })?;
+                    self.send(
+                        seat,
+                        &ServerMessage::Events {
+                            version: table.version(),
+                            hand_number: table.hand_number(),
+                            events: events.to_vec(),
+                        },
+                    )?;
                 }
                 self.sync(table, seat)?;
             }

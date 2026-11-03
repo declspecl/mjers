@@ -1,0 +1,19 @@
+[package]
+name = "mjers-service"
+description = "shared multiplayer room operations for local and AWS runtimes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mjers-core.workspace = true
+mjers-table = { path = "../table" }
+mjers-dynamodb = { path = "../dynamodb" }
+serde.workspace = true
+argon2 = "0.5"
+getrandom = "0.4"
+tokio = { version = "1", features = ["rt"] }
+thiserror = "2"
+
+[lints]
+workspace = true

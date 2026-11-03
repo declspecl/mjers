@@ -1,0 +1,26 @@
+{
+    "name": "@mjers/infra",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@12.16.1",
+    "scripts": {
+        "check-types": "tsc --noEmit",
+        "test": "tsx --test tests/*.test.ts",
+        "synth": "cdk synth",
+        "diff": "cdk diff",
+        "deploy": "cdk deploy",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "aws-cdk-lib": "2",
+        "constructs": "10"
+    },
+    "devDependencies": {
+        "@types/node": "24",
+        "aws-cdk": "2",
+        "prettier": "3",
+        "tsx": "4",
+        "typescript": "5.9"
+    }
+}

@@ -32,11 +32,26 @@ pub async fn ensure_table(
     client: &Client,
     name: &str,
 ) -> Result<(), StoreError> {
+    ensure_keyed_table(client, name, "table_id").await
+}
+
+pub async fn ensure_connections_table(
+    client: &Client,
+    name: &str,
+) -> Result<(), StoreError> {
+    ensure_keyed_table(client, name, "connection_id").await
+}
+
+async fn ensure_keyed_table(
+    client: &Client,
+    name: &str,
+    partition_key: &str,
+) -> Result<(), StoreError> {
     match client.describe_table().table_name(name).send().await {
         Ok(result) => {
             let keys = result.table.as_ref().and_then(|table| table.key_schema.as_deref()).unwrap_or_default();
-            if keys.len() != 1 || keys[0].attribute_name() != "table_id" || keys[0].key_type() != &KeyType::Hash {
-                return Err(StoreError::InvalidRecord("expected a table_id partition key and no sort key"));
+            if keys.len() != 1 || keys[0].attribute_name() != partition_key || keys[0].key_type() != &KeyType::Hash {
+                return Err(StoreError::InvalidRecord("unexpected table key schema"));
             }
             return Ok(());
         },
@@ -44,11 +59,11 @@ pub async fn ensure_table(
         Err(error) => return Err(StoreError::request(error)),
     }
     let attribute = AttributeDefinition::builder()
-        .attribute_name("table_id")
+        .attribute_name(partition_key)
         .attribute_type(ScalarAttributeType::S)
         .build()
         .map_err(StoreError::request)?;
-    let key = KeySchemaElement::builder().attribute_name("table_id").key_type(KeyType::Hash).build().map_err(StoreError::request)?;
+    let key = KeySchemaElement::builder().attribute_name(partition_key).key_type(KeyType::Hash).build().map_err(StoreError::request)?;
     match client
         .create_table()
         .table_name(name)

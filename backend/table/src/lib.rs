@@ -78,8 +78,15 @@ impl BotPreset {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SeatSlot {
     Open,
-    Human { name: String, token_hash: [u8; 32] },
-    Bot { preset: BotPreset },
+    Human {
+        name: String,
+        token_hash: [u8; 32],
+        #[serde(default)]
+        autoplay: bool,
+    },
+    Bot {
+        preset: BotPreset,
+    },
 }
 
 /// Server-only persistence model: contains credentials and hidden hand data.
@@ -92,6 +99,8 @@ pub struct Table {
     seats: [SeatSlot; 4],
     hand: Option<HandRecord>,
     history: Vec<HandRecord>,
+    #[serde(default)]
+    archived_hands: u32,
     scores: [i32; 4],
 }
 
@@ -185,6 +194,7 @@ impl Table {
                 SeatSlot::Human {
                     name: name.clone(),
                     token_hash: token_hash(token),
+                    autoplay: false,
                 }
             } else if index < human_players as usize {
                 SeatSlot::Open
@@ -200,6 +210,7 @@ impl Table {
             seats,
             hand: None,
             history: Vec::new(),
+            archived_hands: 0,
             scores: [0; 4],
         })
     }
@@ -211,10 +222,18 @@ impl Table {
         self.version
     }
     pub fn hand_number(&self) -> u32 {
-        self.history.len() as u32 + u32::from(self.hand.is_some())
+        self.archived_hands + self.history.len() as u32 + u32::from(self.hand.is_some())
     }
     pub fn steps(&self) -> usize {
         self.hand.as_ref().map_or(0, |hand| hand.steps.len())
+    }
+
+    /// Completed hands may be archived by persistence, never sent before hand_over.
+    pub fn completed_hand(&self) -> Result<Option<&HandRecord>, TableError> {
+        match &self.hand {
+            Some(hand) if hand.replay()?.is_over() => Ok(Some(hand)),
+            _ => Ok(None),
+        }
     }
 
     pub fn authenticate(
@@ -251,7 +270,11 @@ impl Table {
             .into_iter()
             .find(|seat| matches!(self.seats[seat.index()], SeatSlot::Open))
             .ok_or_else(|| TableError::new(ErrorCode::TableFull, "All human seats are taken."))?;
-        self.seats[seat.index()] = SeatSlot::Human { name, token_hash: token_hash(token) };
+        self.seats[seat.index()] = SeatSlot::Human {
+            name,
+            token_hash: token_hash(token),
+            autoplay: false,
+        };
         self.version += 1;
         Ok(seat)
     }
@@ -294,6 +317,10 @@ impl Table {
                         }
                         let dealer = hand.dealer.next();
                         self.history.push(hand.clone());
+                        while self.history.len() > 4 {
+                            self.history.remove(0);
+                            self.archived_hands += 1;
+                        }
                         dealer
                     },
                     _ => return Err(TableError::new(ErrorCode::NotReady, "The room is not ready for that action.")),
@@ -302,6 +329,26 @@ impl Table {
                     return Err(TableError::new(ErrorCode::NotReady, "Wait for the remaining human players to join."));
                 }
                 Game::new(Arc::new(Ruleset::family()), seed, dealer)?
+            },
+            ClientMessage::Autoplay { enabled, hand_number, steps_seen } => {
+                if hand_number != self.hand_number() || steps_seen != self.steps() {
+                    return Err(TableError::new(ErrorCode::Stale, "The hand has changed. Use the refreshed state."));
+                }
+                if let SeatSlot::Human { autoplay, .. } = &mut self.seats[seat.index()] {
+                    *autoplay = enabled;
+                }
+                let Some(hand) = &self.hand else {
+                    return Ok(Vec::new());
+                };
+                let mut game = hand.replay()?;
+                if game.is_over() {
+                    return Ok(Vec::new());
+                }
+                let event_start = game.events().len();
+                self.advance_bots(&mut game)?;
+                let events = public_events(&game.events()[event_start..]);
+                self.save_game(&game);
+                return Ok(events);
             },
             ClientMessage::Act { action, hand_number, steps_seen } => {
                 if hand_number != self.hand_number() || steps_seen != self.steps() {
@@ -332,6 +379,7 @@ impl Table {
         loop {
             let bot = game.to_act().iter().find_map(|seat| match self.seats[seat.index()] {
                 SeatSlot::Bot { preset } => Some((seat, preset)),
+                SeatSlot::Human { autoplay: true, .. } => Some((seat, BotPreset::Efficiency)),
                 _ => None,
             });
             let Some((seat, preset)) = bot else {
@@ -401,6 +449,8 @@ impl Table {
                     },
                 );
                 Ok(ServerMessage::Hint {
+                    version: self.version,
+                    hand_number: self.hand_number(),
                     advice: AdviceView {
                         recommended: advice.best(),
                         ranked: advice.ranked,
@@ -430,6 +480,7 @@ impl Table {
                 name,
                 kind,
                 connected: connected[seat.index()],
+                autoplay: matches!(self.seats[seat.index()], SeatSlot::Human { autoplay: true, .. }),
             }
         });
         let mut messages = vec![ServerMessage::State {
@@ -447,6 +498,8 @@ impl Table {
             && let (Some(result), Some(settlement)) = (game.result(), game.settlement())
         {
             messages.push(ServerMessage::HandOver {
+                version: self.version,
+                hand_number: self.hand_number(),
                 result: result.clone(),
                 settlement: settlement.into(),
                 revealed: Box::new(Seat::ALL.map(|seat| Hand::new(game.hand(seat)))),

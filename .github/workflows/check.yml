@@ -22,6 +22,7 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace
       - run: cargo test --locked -p mjers-dynamodb --test local -- --ignored
+      - run: cargo test --locked -p mjers-lambda --test gateway -- --ignored
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -52,3 +53,30 @@ jobs:
       - run: npm ci --prefix npm
       - run: npm test --prefix npm
       - run: npm run test:package --prefix npm
+
+  backend-infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: backend/infra/package.json
+      - run: backend/scripts/build-lambda.sh
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - run: node backend/scripts/check-lambda.mjs
+      - run: pnpm --dir backend/infra install --frozen-lockfile
+      - run: pnpm --dir backend/infra check-types
+      - run: pnpm --dir backend/infra test
+      - run: pnpm --dir backend/infra format:check
+      - run: pnpm --dir backend/infra synth --quiet
+        env:
+          DEPLOYMENT_STAGE: dev
+          SITE_ORIGIN: https://game.example
+          BUDGET_EMAIL: offline-check@example.invalid

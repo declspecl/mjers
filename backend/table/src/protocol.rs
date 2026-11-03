@@ -27,6 +27,8 @@ use serde::{
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
     StartHand,
+    Sync,
+    Autoplay { enabled: bool, hand_number: u32, steps_seen: usize },
     Act { action: Action, hand_number: u32, steps_seen: usize },
     NextHand { hand_number: u32 },
     Hint { samples: u32 },
@@ -48,14 +50,20 @@ pub enum ServerMessage {
         observation: Option<Box<Snapshot>>,
     },
     Events {
+        version: u64,
+        hand_number: u32,
         events: Vec<PublicEvent>,
     },
     HandOver {
+        version: u64,
+        hand_number: u32,
         result: HandResult,
         settlement: SettlementView,
         revealed: Box<[Hand; 4]>,
     },
     Hint {
+        version: u64,
+        hand_number: u32,
         advice: AdviceView,
     },
     Error {
@@ -71,6 +79,7 @@ pub struct SeatView {
     pub name: Option<String>,
     pub kind: SeatKind,
     pub connected: bool,
+    pub autoplay: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -95,6 +104,7 @@ pub enum ErrorCode {
     NotReady,
     HandInProgress,
     Internal,
+    RateLimited,
 }
 
 #[derive(Debug, Clone, Serialize)]

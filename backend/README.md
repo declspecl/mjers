@@ -1,15 +1,37 @@
 # Multiplayer backend
 
-The local implementation has pure room logic in `table/`, a reusable AWS SDK
-DynamoDB adapter in `dynamodb/`, and an HTTP/WebSocket runtime in `dev-server/`.
-All three crates belong to the root Cargo workspace. The engine remains in
-`mjers-core`; its owned observation serializer is shared with WASM.
+The backend runs the native engine in both a local WebSocket server and AWS
+Lambda. The room UI and browser connection are a separate next step.
 
-Rooms always have four seats. The host chooses one to four humans (default: two),
-with bots filling the rest. Human seats remain open until friends join. Every
-human chooses a username; only the host can start the first or subsequent hand.
-The optional room password is verified on joining. A seat token restores an
-existing seat without asking for the password again.
+| Directory | Responsibility |
+| --- | --- |
+| `table/` | Pure room state, engine replay, bots, scoring and wire types |
+| `dynamodb/` | Consistent reads, conditional writes, connection ownership, request counters and replay archives |
+| `service/` | Shared create/join/command orchestration and credential generation |
+| `dev-server/` | Local HTTP and WebSocket transport using DynamoDB Local |
+| `lambda/` | HTTP API v2 and WebSocket proxy Lambda handlers |
+| `infra/` | TypeScript CDK app and infrastructure assertions |
+| `scripts/` | Build, packaged-runtime verification and deployed smoke test |
+
+The Rust crates belong to the root Cargo workspace. `mjers-core` stays WASM-safe
+and shares its observation serializer with WASM and the backend.
+
+## Room behavior
+
+Every room has four seats. The host chooses one to four humans, defaulting to two
+humans and two efficiency bots. `random` and `defensive` bots are also supported.
+Each human chooses a username; reserved human seats stay open until friends join.
+Only the host starts the first and subsequent hands. Dealer rotation and scores
+continue across hands.
+
+Rooms have a six-character invite code and a join path. Password protection is
+optional. The password is verified when joining; an existing seat reconnects
+with its private token. Joining is allowed only before the first hand starts.
+
+An authenticated human can enable or disable `autoplay` for their own seat. The
+seat retains its name, token and human identity; an efficiency bot makes its
+new decisions while autoplay is enabled. Disconnects alone do not enable bots.
+There are no turn timers or EventBridge schedules in v1.
 
 ## Run locally
 
@@ -20,15 +42,10 @@ docker compose -f backend/compose.yaml up -d
 cargo run --locked -p mjers-dev-server
 ```
 
-The default address is `127.0.0.1:3001`; override it with `MJERS_LISTEN`.
-Room state is stored in DynamoDB Local and survives server and container
-restarts. The Compose service binds only to loopback and uses a named volume.
-The server creates its local table on startup; it fails if DynamoDB is
-unavailable, with no in-memory fallback. Active socket handles and presence
-remain local to the running server. This is a development harness; room expiry
-and public-service request limits are still pending.
-
-Configuration:
+DynamoDB Local uses a named volume and binds only to loopback. Room state survives
+both server and container restarts. The server provisions its local room table
+on startup and fails if DynamoDB is unavailable; there is no in-memory fallback.
+Only active socket handles and presence live in the local process.
 
 | Variable | Default |
 | --- | --- |
@@ -36,16 +53,16 @@ Configuration:
 | `MJERS_DYNAMODB_ENDPOINT` | `http://127.0.0.1:8000` |
 | `MJERS_DYNAMODB_TABLE` | `mjers-local-tables` |
 
-The local SDK client supplies dummy credentials and an explicit region and
-endpoint. It does not read your AWS credential profile. The future hosted
-runtime will inject its own SDK client into the same `TableStore`.
+The local SDK client uses dummy credentials with an explicit region and endpoint.
+It does not read your AWS credential profile. Lambda injects a production SDK
+client into the same persistence adapter and uses its execution role.
 
-Stop DynamoDB with `docker compose -f backend/compose.yaml down`. The named
-volume is retained. Add `--volumes` only when intentionally erasing local data.
+Stop DynamoDB with `docker compose -f backend/compose.yaml down`. The volume is
+retained. Adding `--volumes` intentionally erases local data.
 
-## Create and join
+## HTTP protocol
 
-`POST /tables` accepts:
+`POST /tables`:
 
 ```json
 {
@@ -56,112 +73,199 @@ volume is retained. Add `--volumes` only when intentionally erasing local data.
 }
 ```
 
-`human_players` defaults to 2; `bot` defaults to `efficiency` and also accepts
-`random` or `defensive`. Omit `password` for an unprotected room.
-
-The response contains `table` (a six-character invite code), `seat_token`, `seat`,
-and `join_path` (`/?room=CODE`). The web client will combine that path with its
-own origin for the copy-link control. Passwords and seat tokens must not be
-included in share links. The current web app does not consume these links yet.
-
-`POST /tables/{code}/join` accepts `name` and an optional `password`, returning
-the same response shape. Joining is allowed only before the first hand starts,
-and only for reserved human seats. Names are trimmed, nonempty and at most 40
+`human_players` defaults to 2, and `bot` defaults to `efficiency`. Omit `password`
+for an unprotected room. Usernames are trimmed, nonempty and at most 40
 characters. Passwords accept at most 128 bytes.
 
-Passwords are salted Argon2id hashes. Seat tokens contain 32 random bytes, are
-returned once, and are persisted only as SHA-256 hashes with constant-time
-comparison. Random bytes come from the adapter, never the engine or table crate.
+`POST /tables/{code}/join` accepts `name` and an optional `password`. Both endpoints
+return `table`, `seat_token`, `seat`, and `join_path` (`/?room=CODE`). The future
+web client combines that path with its origin for copy-link. Passwords and seat
+tokens must never be included in share links. Responses use `Cache-Control:
+no-store`. The current web app does not consume these links yet.
+
+Passwords use salted Argon2id hashes. Seat tokens contain 32 random bytes and
+are returned once, persisted only as SHA-256 hashes, and compared in constant
+time. OS randomness and password work live outside the engine; password hashing
+and verification run outside the async runtime.
 
 ## WebSocket protocol
 
-Connect to `/ws?table=CODE&token=SEAT_TOKEN`. Authentication fixes the seat for
-the connection; client messages cannot supply a different seat. Reconnecting
-replaces and closes the previous socket immediately. A bounded outgoing queue
-closes slow consumers rather than accumulating messages indefinitely.
+Local: `/ws?table=CODE&token=SEAT_TOKEN`. AWS: use the CDK WebSocket endpoint with
+the same query parameters. Authentication fixes the seat; client bodies cannot
+supply another seat. Allowed browser origins must match `SITE_ORIGIN` on AWS.
 
-The full types are in `table/src/protocol.rs`. Client messages:
+Send `sync` after **every** socket open, including reconnects. API Gateway's
+`$connect` handler saves authentication/ownership but does not send to a socket
+before the handshake completes. `sync` marks the connection ready and sends full
+state. The local server also sends initial state automatically.
 
 ```json
+{"type":"sync"}
 {"type":"start_hand"}
 {"type":"act","action":{"discard":"5m"},"hand_number":1,"steps_seen":0}
+{"type":"autoplay","enabled":true,"hand_number":1,"steps_seen":0}
 {"type":"hint","samples":0}
 {"type":"next_hand","hand_number":1}
 {"type":"ping"}
 ```
 
-`state` includes room settings, names, presence, running scores, hand number,
-step count, table version and the receiving seat's `observation`. The observation
-is null in the lobby. A stale action produces an error followed by fresh state;
-the client should let the player reconsider using that state. Hand numbers guard
-against late messages from earlier hands whose step counts happen to match.
+Send `ping` at least every five minutes and reconnect automatically when the
+socket closes. Keep the seat token on the client so it can restore the seat.
 
-`events` contains only resolved public events. Draw events omit the tile, and
-deals are excluded. `hand_over` alone includes the four revealed hands and
-settlement, including `total`. Reconnecting after a hand ends also sends
-`hand_over`. `hint` uses the existing advice shape; only instant (zero sample)
-hints are enabled. Hints and pings do not mutate table state.
+`table/src/protocol.rs` defines the wire types. `state` includes room settings,
+names, presence, scores, hand number, step count, table version and the receiving
+seat's observation (null in the lobby). Actions guard both hand number and step
+count. A stale action returns an error followed by fresh state; the player can
+reconsider using that state.
 
-The persisted table is a separate server-only model. It contains credentials,
-seeds and action logs and must never be returned to a client. Each action
-rebuilds the hand from its recorded seed and steps. Bots are consulted only for
-new decisions, including bot claim responses while a human claim is pending.
-Failed commands do not change the table. The local adapter serializes mutations
-under each room's lock for broadcast ordering. Every operation reads from
-DynamoDB with `ConsistentRead`, and mutations commit using a conditional
-`version` check before broadcasting. A conflict causes a fresh read and command
-re-evaluation, with up to four attempts. No game state is cached in memory.
+`events` describes resolved public events. Deals are omitted, and draw events
+omit the drawn tile. `hand_over` alone includes the four revealed hands and
+settlement, including `total`; reconnecting after a finished hand also sends it.
+Hints use the existing advice shape, and only instant, zero-sample hints are
+supported. Hints and pings do not mutate game state.
 
-The DynamoDB item uses `table_id` as its string partition key, `version` as a
-native number for conditional writes, and `document` as a JSON string containing
-the server-only table. This preserves full-width `u64` seeds without JavaScript
-number rounding. Reads check identity/version agreement. Conditional creates
-protect invite-code collisions; updates cannot recreate a missing record.
+State, events, hand-over and hint messages carry `version` and `hand_number`.
+Concurrent Lambdas can deliver messages out of order. The client must discard
+messages older than its current table version; multiple messages at the same
+version belong to the same update. Presence can change without a game version
+change, so equal-version state messages must still be accepted. Use `sync` to
+recover if a callback is missed. Delivery is best effort; persisted state is the
+truth, and callback failures do not roll back committed actions or joins.
 
-The local server is a single WebSocket runtime: socket replacement and broadcasts
-operate within that process. DynamoDB tests also exercise writes from independent
-clients/processes. Distributed connection routing belongs to the Lambda/API
-Gateway adapter.
+## Persistence and connection ownership
 
-## Verify
+The room item uses a string `table_id` key, native numeric `version`, and a JSON
+`document` string. Seeds remain exact `u64` values. Persisted documents contain
+hidden data and credentials and must never be returned to clients.
+
+Every operation reads with `ConsistentRead`. Mutations commit against an expected
+version; conflicts cause a fresh read and command re-evaluation, with at most
+four attempts. Commands and bots replay only recorded actions. Bots are asked
+only for new decisions, including bot claims in mixed human/bot claim windows.
+
+Rooms expire 24 hours after their last mutation. Reads and writes enforce expiry
+immediately, because DynamoDB TTL deletion is asynchronous. Old local items
+without a TTL acquire one on their next write.
+
+A room retains at most four finished hand records inline to bound item size.
+A separate `hand#ROOM#NUMBER` item archives each completed hand for seven days.
+The archive, final state and score commit in one DynamoDB transaction. These
+server-only records can replay the hand; no public replay endpoint is exposed.
+
+AWS connections use a second table with a `connection_id` string key and TTL.
+Each socket has a record and each seat has an authoritative ownership record.
+Replacement atomically revokes the old socket record before attempting to close
+it. A late disconnect cannot delete the replacement. Game mutations include an
+ownership condition in their DynamoDB transaction, so a replaced invocation
+cannot commit. Strongly consistent reads of four seat records avoid a GSI's
+propagation delay. `GoneException` removes dead connection records.
+
+The connection table also stores expiring atomic request counters. The hosted
+adapter allows 5 creates per IP/minute, 10 joins per room/IP/minute, 20 connection
+attempts per IP/minute, and 120 messages per connection/minute. IP scopes are
+hashed before storage. API Gateway also applies aggregate throttles; the Lambda
+has bounded reserved concurrency. These limits are not hard spending caps.
+
+The local transport is one process: it serializes its broadcasts and keeps socket
+handles locally. It shares room orchestration and persistence with Lambda.
+Distributed socket ownership is exercised by Lambda integration tests using
+DynamoDB Local and a local management callback endpoint.
+
+## Verification
 
 ```sh
 docker compose -f backend/compose.yaml up -d
 cargo test --locked --workspace
 cargo test --locked -p mjers-dynamodb --test local -- --ignored
+cargo test --locked -p mjers-lambda --test gateway -- --ignored
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo build --locked -p mjers-core --target wasm32-unknown-unknown
 node --test backend/dev-server/tests/rooms.test.mjs
+pnpm --dir backend/infra install --frozen-lockfile
+pnpm --dir backend/infra check-types
+pnpm --dir backend/infra test
+pnpm --dir backend/infra format:check
 ```
 
-The storage integration test is explicitly marked ignored for ordinary
-`cargo test` runs because it requires DynamoDB Local. The command above runs it
-against the real service and fails if it is unavailable. It creates and deletes
-an isolated DynamoDB table, testing exact persistence, conditional creates,
-competing joins and claims, stale versions, malformed records and missing tables.
+The two Rust integration suites are explicitly ignored by ordinary `cargo test`
+because they need DynamoDB Local; the commands above run them and fail if it is
+unavailable. They provision and delete isolated tables. Storage tests cover
+conditional writes, simultaneous joins/claims, expiry and malformed records.
+Lambda tests exercise real signed SDK requests, passwords, per-seat privacy,
+replacement, late disconnects, transactional ownership, rate limits, dead
+sockets, autoplay, full hands, score archives and next-hand rotation.
 
-The Node 24+ socket tests require the same running DynamoDB Local service. They
-start and stop local servers on ephemeral ports, restart mid-hand and verify
-that observations, scores, credentials and steps survive. They also finish a
-two-human/two-bot hand and race joins from two server processes. They use the
-separate `mjers-test-sockets` DynamoDB table by default (override with
-`MJERS_DYNAMODB_TABLE`); test rooms remain there until local data is reset.
+The Node 24+ transport tests restart the server mid-hand and compete for a seat
+from independent server processes. Their default `mjers-test-sockets` table
+retains test rooms until local data is reset; override it with
+`MJERS_DYNAMODB_TABLE`. Pure table tests stay independent of storage.
 
-CI starts DynamoDB Local and runs both integration suites. Pure table tests stay
-independent of storage and cover 200 bot hands, replay equality, claim conflicts,
-per-seat privacy, scoring and dealer rotation.
+CI runs these checks with DynamoDB Local and synthesizes CDK offline. It also
+builds and executes the packaged Linux arm64 bootstrap in an AL2023 container.
 
-## Next slices
+## AWS packaging and deployment
 
-- Connect the web app: room creation and joining, copy code/link, lobby, remote
-  hand state, reconnect, hints and series play.
-- Add `lambda/` as the AWS adapter and `infra/` as the TypeScript CDK project.
-  The CDK reference projects are `ourlil`, `remindyrs` and `unifit`: thin app
-  entrypoints, explicit deployment configuration, stacks composed from focused
-  constructs, stage-scoped resources and least-privilege grants. Start with one
-  multiplayer stack rather than their larger deployment/pipeline structures.
-- Reuse the DynamoDB adapter with production SDK configuration, API Gateway
-  WebSockets, native arm64 Lambda and an AWS budget alert. Deploy only after
-  the owner selects the account/region and approves deployment.
-- Add room expiry, bounded persisted history, production request limits and
-  password-attempt throttling in the hosted adapter. No timers or schedules in v1.
+The CDK structure follows `ourlil`, `remindyrs` and `unifit`: thin app entrypoint,
+explicit configuration, one stack, and a focused storage construct.
+
+Build the deployable archive (requires Rust, rustup and uv):
+
+```sh
+backend/scripts/build-lambda.sh
+node backend/scripts/check-lambda.mjs
+```
+
+The build pins Cargo Lambda through uv and cross-compiles for Linux arm64. Its
+Zig dependency is installed in uv's tool environment. The output is
+`target/lambda/mjers-lambda/bootstrap.zip`. The packaging check requires Docker:
+it verifies the ELF architecture/executable bit and runs the extracted bootstrap
+in Lambda's AL2023 base image against a local Runtime API. It makes no AWS calls.
+
+From `backend/infra`, set deployment configuration explicitly:
+
+```sh
+export DEPLOYMENT_STAGE=dev
+export AWS_REGION=us-east-1
+export SITE_ORIGIN=https://your-game-host
+export BUDGET_EMAIL=your-notification-address
+pnpm synth
+```
+
+`.env.example` lists the variables; the app does not load `.env` files implicitly.
+`LAMBDA_ARCHIVE` can override the built ZIP path. Offline synthesis requires no
+AWS credentials. Real deployment uses the selected AWS profile and CDK account.
+**Ask the owner to select/approve the account, region, origin and budget address
+before bootstrapping or deploying.** No AWS resources have been deployed.
+
+The stack defines:
+
+- A `provided.al2023` arm64 Lambda, 512 MB, 25-second timeout, concurrency 8.
+- HTTP create/join routes with origin-specific CORS and throttling.
+- WebSocket connect/default/disconnect routes, management permissions and throttling.
+- On-demand room and connection DynamoDB tables with TTL. Production tables are
+  retained when the stack is removed; development tables are destroyed.
+- One-week Lambda log retention. Request bodies, tokens and query strings are
+  never logged by application code; WebSocket data tracing is disabled.
+- A monthly **account-wide** $1 actual-spend email notification. This works
+  without cost allocation tag activation, but may already trigger on an existing
+  AWS account's unrelated spending. It is a warning, not an automatic shutdown.
+
+After owner approval, use `pnpm diff`, `pnpm exec cdk bootstrap` only if needed,
+and `pnpm deploy`. CDK outputs the HTTP and WebSocket endpoints and table names.
+
+After deploying, run the real AWS smoke test:
+
+```sh
+node backend/scripts/smoke-aws.mjs HTTPS_ENDPOINT WSS_ENDPOINT
+```
+
+It creates a password-protected two-human room, joins over HTTP, opens two
+sockets, completes a hand using explicit autoplay, reconnects and starts the next
+hand. It leaves the room to expire naturally. IAM, real API Gateway routing and
+cloud delivery remain unverified until that test runs on an approved deployment.
+
+## Deferred work
+
+Room UI and client connection come next. Timers, automatic takeover for absent
+players, spectators, accounts, public replay UI, and stronger neural/search bots
+remain outside v1.

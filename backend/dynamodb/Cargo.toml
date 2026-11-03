@@ -9,10 +9,12 @@ license.workspace = true
 mjers-table = { path = "../table" }
 aws-sdk-dynamodb = "1"
 serde_json.workspace = true
+serde.workspace = true
+mjers-core.workspace = true
+sha2 = "0.10"
 thiserror = "2"
 
 [dev-dependencies]
-mjers-core.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [lints]
