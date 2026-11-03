@@ -13,6 +13,14 @@
     --felt: light-dark(#2f5f50, #234a3f);
     --felt-line: light-dark(#4b7d6c, #3b6657);
     --felt-text: #e9f0ec;
+    --felt-rim: light-dark(#26503f, #1b3b32);
+
+    /* Move grades, read on the panel colour. */
+    --grade-perfect: light-dark(#1f6e4b, #7fd3a8);
+    --grade-good: light-dark(#3d6f22, #b5d77a);
+    --grade-okay: light-dark(#7a5c0c, #e8c869);
+    --grade-bad: light-dark(#a24a17, #f2a26e);
+    --grade-terrible: light-dark(#a8301f, #ff8f7d);
 
     --tile-body: #f1ecdd;
     --tile-edge: #c4b999;

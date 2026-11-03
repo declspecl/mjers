@@ -1,49 +1,152 @@
+import { ActionBar } from "./components/action-bar";
+import { GradeToast } from "./components/grade-toast";
 import { Result } from "./components/result";
+import { SettingsMenu } from "./components/settings-menu";
 import { SidePanel } from "./components/side-panel";
-import { Table } from "./components/table";
-import { YourSide } from "./components/your-side";
+import { Stage } from "./components/stage";
 import { loadEngine, type Mjers } from "./engine/engine";
-import { useHand } from "./engine/use-hand";
-import { useEffect, useState } from "react";
+import { useSettings } from "./engine/settings";
+import { useTable } from "./engine/use-table";
+import type { Tile } from "@mjers/mjers/types";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-const DEALER = 0;
+function Match({ mjers }: { mjers: Mjers }) {
+    const { settings, update } = useSettings();
+    const { match, table, advice, error, graded, gradingFailure, act, draw, move, hint, finishOpening, nextHand } = useTable(
+        mjers,
+        settings,
+    );
+    const [selected, setSelected] = useState<number | null>(null);
+    const analytic = settings.view === "analytic";
 
-function startingSeed(): bigint {
-    const given = new URLSearchParams(globalThis.location.search).get("seed");
+    useEffect(() => {
+        const onKey = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
 
-    return given !== null && /^\d+$/.test(given) ? BigInt(given) : BigInt(Math.floor(Math.random() * 1_000_000));
-}
+            if (event.metaKey || event.ctrlKey || event.altKey || target?.closest("input, textarea, select")) {
+                return;
+            }
 
-function Hand({ mjers }: { mjers: Mjers }) {
-    const [seed, setSeed] = useState(startingSeed);
-    const { view, advice, error, act, hint } = useHand(mjers, seed, DEALER);
+            if (event.key === "v" || event.key === "V") {
+                update({ view: settings.view === "immersive" ? "analytic" : "immersive" });
+            }
 
-    if (view === undefined) {
+            if ((event.key === "d" || event.key === "D") && table?.model.pending.length) {
+                draw();
+            }
+        };
+
+        globalThis.addEventListener("keydown", onKey);
+
+        return () => globalThis.removeEventListener("keydown", onKey);
+    }, [settings.view, update, table, draw]);
+
+    const faceOf = useCallback((id: number | null): Tile | null => (id === null ? null : (table?.model.faces[id] ?? null)), [table]);
+
+    const canDiscard = useCallback(
+        (id: number) => {
+            if (
+                !table ||
+                table.phase !== "play" ||
+                !table.humanToAct ||
+                table.model.pending.length > 0 ||
+                table.observation.decision.kind !== "turn"
+            ) {
+                return false;
+            }
+
+            const face = faceOf(id);
+
+            return table.observation.legal_actions.some(
+                (action) => typeof action === "object" && "discard" in action && action.discard === face,
+            );
+        },
+        [table, faceOf],
+    );
+
+    const discard = useCallback(
+        (id: number) => {
+            const face = faceOf(id);
+
+            if (face !== null && canDiscard(id)) {
+                setSelected(null);
+                act({ discard: face }, id);
+            }
+        },
+        [faceOf, canDiscard, act],
+    );
+
+    const suggested = useMemo(() => {
+        if (!table || !advice || typeof advice.recommended !== "object" || !("discard" in advice.recommended)) {
+            return null;
+        }
+
+        const tile = advice.recommended.discard;
+        const drawn = table.model.drawn[0];
+
+        return drawn !== null && drawn !== undefined && table.model.faces[drawn] === tile
+            ? drawn
+            : (table.model.hands[0]!.findLast((id) => table.model.faces[id] === tile) ?? null);
+    }, [table, advice]);
+
+    if (!table) {
         return <p className="loading">Dealing the hand.</p>;
     }
 
-    const source = view.result?.win?.source;
-    const winningTile = source !== undefined && source !== "SelfDraw" ? view.observation.discards.at(-1)?.tile : undefined;
-    const key = `${seed}-${view.observation.discards.length}-${view.observation.hand.concealed}-${view.observation.decision.kind}`;
+    const held = new Set([...table.model.hands[0]!, table.model.drawn[0]]);
+    const selectedId = selected !== null && held.has(selected) ? selected : null;
+    const latest = graded.at(-1);
 
     return (
-        <div className="screen">
+        <div className="screen" data-view={settings.view}>
             <div className="play">
-                <Table view={view} dealer={DEALER} />
-                <YourSide key={key} view={view} advice={advice} dealer={DEALER} onAct={act} onHint={hint} />
-            </div>
-            <div className="column">
-                {view.over && view.result && view.settlement && (
-                    <Result
-                        result={view.result}
-                        settlement={view.settlement}
-                        winnerHand={view.winnerHand}
-                        winningTile={winningTile}
-                        onNext={() => setSeed((current) => current + 1n)}
+                <Stage
+                    table={table}
+                    analytic={analytic}
+                    selected={selectedId}
+                    suggested={analytic ? suggested : null}
+                    canDiscard={canDiscard}
+                    onSelect={setSelected}
+                    onDiscard={discard}
+                    onDraw={draw}
+                    onMove={move}
+                    onOpeningDone={finishOpening}
+                >
+                    <ActionBar
+                        table={table}
+                        advice={analytic ? advice : undefined}
+                        selectedTile={faceOf(selectedId)}
+                        onAct={(action) => {
+                            setSelected(null);
+                            act(action);
+                        }}
+                        onDiscard={() => selectedId !== null && discard(selectedId)}
+                        onDraw={draw}
                     />
-                )}
-                <SidePanel view={view} advice={advice} error={error} />
+                    {settings.feedback && <GradeToast latest={latest?.hand === table.hand ? latest : undefined} />}
+                    {table.phase === "over" && table.result && table.settlement && (
+                        <Result result={table.result} settlement={table.settlement} totals={match.totals} onNext={nextHand} />
+                    )}
+                </Stage>
+                <SettingsMenu settings={settings} onChange={update} onSkipOpening={table.phase === "opening" ? finishOpening : undefined} />
             </div>
+            {analytic && (
+                <SidePanel
+                    table={table}
+                    advice={advice}
+                    error={error}
+                    graded={graded}
+                    feedback={settings.feedback}
+                    gradingFailure={gradingFailure}
+                    totals={match.totals}
+                    onHint={hint}
+                />
+            )}
+            {!analytic && error !== undefined && (
+                <p className="problem floating" role="alert">
+                    The engine rejected that move: {error}. Pick another action.
+                </p>
+            )}
         </div>
     );
 }
@@ -58,13 +161,9 @@ export default function App() {
 
     return (
         <main>
-            <header>
-                <h1>mjers</h1>
-                <p>Family rules. You sit at the bottom against three bots.</p>
-            </header>
-            {error !== undefined && <p className="problem">The engine did not load: {error}</p>}
+            {error !== undefined && <p className="problem">The engine did not load: {error}. Reload the page to try again.</p>}
             {error === undefined && mjers === undefined && <p className="loading">Loading the engine.</p>}
-            {mjers !== undefined && <Hand mjers={mjers} />}
+            {mjers !== undefined && <Match mjers={mjers} />}
         </main>
     );
 }

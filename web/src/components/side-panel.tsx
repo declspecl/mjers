@@ -1,10 +1,14 @@
 import { seatName, tileName } from "../engine/names";
-import type { HandView } from "../engine/use-hand";
+import type { TableState } from "../engine/use-table";
+import { GRADES } from "../grading/grade";
+import type { GradedMove } from "../grading/use-grader";
 import type { Action, Advice, Seat } from "@mjers/mjers/types";
 
 function actionLabel(action: Action, offered: string | undefined): string {
     if (typeof action === "string") {
-        return { self_draw_win: "Declare win", pass: "Pass", pong: "Pong", kong: "Kong", win: `Win with ${offered ?? "the tile"}` }[action];
+        return { self_draw_win: "Win by self-draw", pass: "Pass", pong: "Pong", kong: "Gong", win: `Win with ${offered ?? "the discard"}` }[
+            action
+        ];
     }
 
     if ("discard" in action) {
@@ -12,14 +16,18 @@ function actionLabel(action: Action, offered: string | undefined): string {
     }
 
     if ("chow" in action) {
-        return `Chow starting at ${tileName(action.chow)}`;
+        return `Seung from ${tileName(action.chow)}`;
     }
 
     if ("concealed_kong" in action) {
-        return `Concealed kong of ${tileName(action.concealed_kong)}`;
+        return `Am gong of ${tileName(action.concealed_kong)}`;
     }
 
-    return `Make ${tileName(action.upgrade_kong)} a kong`;
+    return `Gong with ${tileName(action.upgrade_kong)}`;
+}
+
+function lowerFirst(text: string): string {
+    return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
 const SEATS: Seat[] = [0, 1, 2, 3];
@@ -43,12 +51,20 @@ function plainReason(reason: string): string {
     });
 }
 
-function statusText(view: HandView): string {
-    const { observation, humanToAct, over } = view;
+function statusText(table: TableState): string {
+    const { observation, humanToAct, phase, model } = table;
     const { decision } = observation;
 
-    if (over) {
+    if (phase === "opening") {
+        return "Building the wall and dealing.";
+    }
+
+    if (phase === "over") {
         return "The hand is over.";
+    }
+
+    if (model.pending.length > 0) {
+        return "Your turn. Draw a tile from the wall.";
     }
 
     if (humanToAct && decision.kind === "claim") {
@@ -58,7 +74,7 @@ function statusText(view: HandView): string {
     }
 
     if (humanToAct) {
-        return decision.kind === "turn" && decision.after_claim ? "Discard a tile." : "Your turn. Select a tile, then discard it.";
+        return "Your turn. Select a tile, then discard it.";
     }
 
     const next = observation.to_act[0];
@@ -67,28 +83,72 @@ function statusText(view: HandView): string {
 }
 
 interface SidePanelProps {
-    view: HandView;
+    table: TableState;
     advice: Advice | undefined;
     error: string | undefined;
+    graded: GradedMove[];
+    feedback: boolean;
+    gradingFailure: string | undefined;
+    totals: number[];
+    onHint: () => void;
 }
 
-/** Whose move it is, the wall, an optional hint, and what has happened this hand. */
-export function SidePanel({ view, advice, error }: SidePanelProps) {
-    const { observation, events } = view;
+/** The analytic view: whose move it is, the wall, the engine's verdicts and hints, and what has happened this hand. */
+export function SidePanel({ table, advice, error, graded, feedback, gradingFailure, totals, onHint }: SidePanelProps) {
+    const { observation, events, humanToAct, phase, model } = table;
     const best = advice?.ranked[0];
     const offered = observation.decision.kind === "claim" ? tileName(observation.decision.tile) : undefined;
+    const latest = graded.at(-1);
+    const tally = GRADES.map((grade) => ({ grade, count: graded.filter((entry) => entry.result.grade === grade).length })).filter(
+        (entry) => entry.count > 0,
+    );
 
     return (
         <aside className="side" aria-label="Hand status">
             <p className="status" role="status">
-                {statusText(view)}
+                {statusText(table)}
             </p>
-            <p className="wall">{observation.live_wall} tiles left in the wall</p>
+            <p className="wall">
+                {observation.live_wall} tiles left in the live wall. Hand {table.hand + 1}, you{" "}
+                {totals[0]! > 0 ? `+${totals[0]}` : totals[0]} in the match.
+            </p>
 
             {error !== undefined && (
                 <p className="problem" role="alert">
                     The engine rejected that move: {error}. Pick another action.
                 </p>
+            )}
+
+            {feedback && (
+                <div className="verdict">
+                    <h2>Your moves</h2>
+                    {latest ? (
+                        <>
+                            <p>
+                                <strong data-grade={latest.result.grade.toLowerCase()}>{latest.result.grade}</strong> for{" "}
+                                {lowerFirst(actionLabel(latest.action, undefined))}.
+                                {latest.result.grade !== "Perfect" && (
+                                    <> The engine preferred {lowerFirst(actionLabel(latest.result.best, undefined))}.</>
+                                )}
+                            </p>
+                            <p className="muted">{latest.result.reason}</p>
+                            <p className="muted">
+                                {tally.map((entry) => `${entry.count} ${entry.grade.toLowerCase()}`).join(", ")} this hand.
+                            </p>
+                        </>
+                    ) : (
+                        <p className="muted">Each move you make is graded against the engine once its playouts finish.</p>
+                    )}
+                    {gradingFailure !== undefined && (
+                        <p className="problem">Grading stopped: {gradingFailure}. Reload the page to restart it.</p>
+                    )}
+                </div>
+            )}
+
+            {phase === "play" && humanToAct && model.pending.length === 0 && (
+                <button type="button" onClick={onHint}>
+                    Show a hint
+                </button>
             )}
 
             {advice !== undefined && (
