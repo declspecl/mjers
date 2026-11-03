@@ -1,5 +1,6 @@
 import type { Mjers } from "./engine";
-import { describeAction, describeMeld, HUMAN } from "./names";
+import { createLog, type EventLog, type LogEvent, recordMove } from "./event-log";
+import { HUMAN } from "./names";
 import type { Action, Advice, Hand, HandResult, Observation, Seat, Settlement } from "@mjers/mjers/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -10,12 +11,6 @@ const BOT_SEATS: Seat[] = [1, 2, 3];
 /** A bot's turn is slow enough to follow; claim responses are not worth waiting for. */
 const TURN_DELAY_MS = 650;
 const CLAIM_DELAY_MS = 80;
-
-export interface LogEvent {
-    id: number;
-    seat: Seat;
-    text: string;
-}
 
 export interface HandView {
     observation: Observation;
@@ -31,9 +26,7 @@ export interface HandView {
 interface Live {
     game: GameHandle;
     bots: Map<Seat, BotHandle>;
-    events: LogEvent[];
-    /** Melds each seat showed after the last move, to spot claims that took effect. */
-    melds: number[];
+    log: EventLog;
 }
 
 function snapshot(live: Live): HandView {
@@ -47,34 +40,8 @@ function snapshot(live: Live): HandView {
         result,
         settlement: game.settlement(),
         winnerHand: result?.win ? game.observe(result.win.winner).hand : undefined,
-        events: live.events.slice(-10),
+        events: live.log.events.slice(-10),
     };
-}
-
-function log(live: Live, seat: Seat, text: string) {
-    live.events.push({ id: (live.events.at(-1)?.id ?? 0) + 1, seat, text });
-}
-
-/** Logs what a move did. A claim is only logged once it wins, when the claimer's melds grow. */
-function record(live: Live, seat: Seat, action: Action) {
-    const text = describeAction(action);
-
-    if (text !== undefined) {
-        log(live, seat, text);
-    }
-
-    const concealedKong = typeof action === "object" && "concealed_kong" in action;
-
-    for (const player of live.game.observe(HUMAN).players) {
-        const before = live.melds[player.seat] ?? 0;
-        const meld = player.melds.at(-1);
-
-        live.melds[player.seat] = player.melds.length;
-
-        if (meld && player.melds.length > before && !(concealedKong && player.seat === seat)) {
-            log(live, player.seat, describeMeld(meld));
-        }
-    }
 }
 
 /** Plays one hand: the human sits at seat 0 and the engine's bots take the other three. */
@@ -87,7 +54,7 @@ export function useHand(mjers: Mjers, seed: bigint, dealer: Seat) {
     useEffect(() => {
         const game = new mjers.Game(seed, dealer);
         const bots = new Map(BOT_SEATS.map((seat) => [seat, new mjers.Bot("efficiency", seed * 4n + BigInt(seat))] as const));
-        const current: Live = { game, bots, events: [], melds: [0, 0, 0, 0] };
+        const current: Live = { game, bots, log: createLog() };
 
         live.current = current;
         setView(snapshot(current));
@@ -113,7 +80,7 @@ export function useHand(mjers: Mjers, seed: bigint, dealer: Seat) {
 
         try {
             current.game.apply(seat, action);
-            record(current, seat, action);
+            recordMove(current.log, current.game.observe(HUMAN).players, seat, action);
             setAdvice(undefined);
             setError(undefined);
             setView(snapshot(current));

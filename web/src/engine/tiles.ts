@@ -36,6 +36,15 @@ export function meldTiles(meld: Meld): Tile[] {
     return Array.from({ length: 4 }, () => meld.kong[0]);
 }
 
+const ASSET_KINDS: Record<string, string> = { m: "man", p: "pin", s: "sou", z: "honor", F: "flower", S: "season" };
+
+/** The file name stem for a tile's artwork, for example "5m" is "man-5". */
+export function tileAssetName(tile: Tile): string {
+    const { rank, suit } = parseTile(tile);
+
+    return `${ASSET_KINDS[suit] ?? suit}-${rank}`;
+}
+
 export function removeOne(tiles: Tile[], tile: Tile): Tile[] {
     const index = tiles.lastIndexOf(tile);
 
