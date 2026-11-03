@@ -1,11 +1,28 @@
 :root {
     color-scheme: light dark;
-    --bg: light-dark(#f6f5f1, #15171a);
-    --fg: light-dark(#1d2024, #e8e9ea);
-    --muted: light-dark(#5d636b, #9aa0a8);
-    --surface: light-dark(#ffffff, #1f2227);
-    --border: light-dark(#d9d7cf, #333840);
-    --accent: light-dark(#1f6f50, #5fbf96);
-    --font: system-ui, sans-serif;
-    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+    --page: light-dark(#e4e9e5, #1c2b2d);
+    --text: light-dark(#1d2a2c, #e5ece8);
+    --muted: light-dark(#4f6063, #a3b4b4);
+    --rule: light-dark(#bcc8c2, #3a4f50);
+    --panel: light-dark(#f2f5f2, #243537);
+    --accent: light-dark(#a8301f, #ec8571);
+    --accent-text: light-dark(#ffffff, #1c2b2d);
+    --focus: light-dark(#14507a, #8fc4ee);
+
+    --felt: light-dark(#2f5f50, #234a3f);
+    --felt-line: light-dark(#4b7d6c, #3b6657);
+    --felt-text: #e9f0ec;
+
+    --tile-body: #f1ecdd;
+    --tile-edge: #c4b999;
+    --tile-ink: #1f2a2d;
+    --tile-red: #b3382c;
+    --tile-green: #2c7a58;
+    --tile-blue: #29608a;
+    --tile-back: #2f7a62;
+    --tile-back-edge: #1d5a47;
+
+    --font: "Avenir Next", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --serif-cjk: "Songti SC", "Hiragino Mincho ProN", "Noto Serif CJK SC", "Source Han Serif SC", serif;
 }
