@@ -37,137 +37,181 @@ function ms(base: number): number {
     return Math.round(base * PACE);
 }
 
-/** Tiles spread over this much of the table while mixing; it stays clear of where the walls will stand. */
-const PILE_RADIUS = 290;
-const SHUFFLE_STEPS = 36;
-const SHUFFLE_STEP_MS = 140;
-/** How far a hand reaches, and how hard it shoves the tiles under it. */
-const HAND_REACH = 85;
-const HAND_SHOVE = 26;
+/** The washing area: tiles stay inside it, clear of where the walls will stand. */
+const WASH_RADIUS = 300;
+/** Tiles are treated as discs this wide when they knock into each other. */
+const TILE_RADIUS = 19;
+const PALM_RADIUS = 46;
+/** Each hand sweeps a circle this big around a spot in front of its player, once every this many milliseconds. */
+const HAND_CIRCLE = 95;
+const HAND_PERIOD = 760;
+const WASH_MS = 2100;
+/** How far round the table the hands work their way during the wash, in radians. */
+const HEAP_TURN = 1.6;
+const FRAME_MS = 60;
+const SUBSTEPS = 4;
 
 /** The same angle as `rotation`, moved by whole turns to lie within half a turn of `target`. */
 function nearestTurn(rotation: number, target: number): number {
     return rotation - Math.round((rotation - target) / 360) * 360;
 }
 
-function spread(state: { random: number }, radius: number): { x: number; y: number } {
-    const angle = nextRandom(state) * Math.PI * 2;
-    const distance = Math.sqrt(nextRandom(state)) * radius;
-
-    return { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance };
+interface Body {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    rotation: number;
+    /** Degrees of turn per unit of distance moved; tiles knocked about turn as they slide. */
+    twist: number;
 }
 
-/** The tiles pushed face down and strewn all over the middle of the table. */
-function heap(state: { random: number }): Pose[] {
-    return Array.from({ length: TILE_COUNT }, (_, id) => {
-        const point = spread(state, PILE_RADIUS * 0.9);
+/** Pushes overlapping tiles apart, the way solid tiles shoulder each other aside, and keeps them on the washing area. */
+function separate(bodies: Body[]) {
+    const reach = TILE_RADIUS * 2;
+
+    for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < bodies.length; i++) {
+            const a = bodies[i]!;
+
+            for (let j = i + 1; j < bodies.length; j++) {
+                const b = bodies[j]!;
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+
+                if (Math.abs(dx) >= reach || Math.abs(dy) >= reach) {
+                    continue;
+                }
+
+                const gap = Math.hypot(dx, dy);
+
+                if (gap >= reach || gap === 0) {
+                    continue;
+                }
+
+                const shove = (reach - gap) / gap / 2;
+
+                a.x -= dx * shove;
+                a.y -= dy * shove;
+                b.x += dx * shove;
+                b.y += dy * shove;
+            }
+        }
+
+        for (const body of bodies) {
+            const distance = Math.hypot(body.x, body.y);
+
+            if (distance > WASH_RADIUS) {
+                body.x *= WASH_RADIUS / distance;
+                body.y *= WASH_RADIUS / distance;
+            }
+        }
+    }
+}
+
+/** The tiles pushed face down into one loose layer in the middle of the table. Positions are from the table centre. */
+function heapBodies(state: { random: number }): Body[] {
+    const bodies = Array.from({ length: TILE_COUNT }, () => {
+        const angle = nextRandom(state) * Math.PI * 2;
+        const distance = Math.sqrt(nextRandom(state)) * WASH_RADIUS * 0.85;
 
         return {
-            x: CENTER + point.x,
-            y: CENTER + point.y,
+            x: Math.cos(angle) * distance,
+            y: Math.sin(angle) * distance,
+            vx: 0,
+            vy: 0,
             rotation: nextRandom(state) * 360,
-            scale: 1,
-            face: "down" as const,
-            z: 100 + id,
+            twist: (nextRandom(state) - 0.5) * 1.6,
         };
     });
+
+    for (let settle = 0; settle < 6; settle++) {
+        separate(bodies);
+    }
+
+    return bodies;
+}
+
+function posesOf(bodies: Body[]): Pose[] {
+    return bodies.map((body, id) => ({
+        x: CENTER + body.x,
+        y: CENTER + body.y,
+        rotation: body.rotation,
+        scale: 1,
+        face: "down" as const,
+        z: 100 + id,
+    }));
 }
 
 /**
- * Four players scrambling with both hands. Every tile keeps its own momentum and spin. Each step all eight hands slap down
- * somewhere in front of their player and shove the tiles under them, mostly counter-clockwise round the table but every shove
- * a little different. So the pile churns chaotically while drifting counter-clockwise overall. Each frame is one short
- * linear step, so the motion runs on without stopping.
+ * Washing the tiles: all four players lay both palms flat on the face-down tiles and scrub them round in big, quick circles,
+ * every hand going counter-clockwise. Tiles under a palm are carried with it; the rest are shouldered aside, since tiles are
+ * solid and never pass through each other. A small simulation runs the motion, sampled into short linear frames.
  */
-function shuffleFrames(start: Pose[], state: { random: number }): Frame[] {
-    const tiles = start.map((pose) => ({
-        pose: { ...pose },
-        vx: 0,
-        vy: 0,
-        spin: (nextRandom(state) - 0.5) * 20,
-    }));
+function washFrames(bodies: Body[], state: { random: number }): Frame[] {
+    const hands = ([0, 1, 2, 3] as Seat[]).flatMap((seat) =>
+        [-1, 1].map((side) => {
+            const anchor = toStage(seat, side * 105, 165);
+
+            return {
+                x: anchor.x - CENTER,
+                y: anchor.y - CENTER,
+                phase: nextRandom(state) * Math.PI * 2,
+                period: HAND_PERIOD * (0.85 + nextRandom(state) * 0.3),
+            };
+        }),
+    );
     const frames: Frame[] = [];
-    const seats: Seat[] = [0, 1, 2, 3];
+    const dt = FRAME_MS / SUBSTEPS;
 
-    for (let step = 1; step <= SHUFFLE_STEPS; step++) {
-        // Hands get going out of the push and ease off at the end.
-        const effort = Math.min(1, step / 4, (SHUFFLE_STEPS + 1 - step) / 6);
-        const hands = seats.flatMap((seat) =>
-            [-1, 1].map((side) => {
-                // Anywhere within reach in front of the player, that hand on its own side.
-                const at = toStage(seat, side * (30 + nextRandom(state) * 150), 40 + nextRandom(state) * 230);
-                const x = at.x - CENTER;
-                const y = at.y - CENTER;
-                const distance = Math.hypot(x, y) || 1;
-                // Counter-clockwise on screen (y points down), turned up to 50 degrees either way, and usually scooping inward
-                // a little, the way hands gather the tiles back in.
-                const swerve = (nextRandom(state) - 0.5) * 1.75;
-                const scoop = -0.2 + nextRandom(state) * 0.9;
-                const tx = y / distance - (x / distance) * scoop;
-                const ty = -x / distance - (y / distance) * scoop;
-                const length = Math.hypot(tx, ty);
+    for (let time = FRAME_MS; time <= WASH_MS; time += FRAME_MS) {
+        for (let sub = 1; sub <= SUBSTEPS; sub++) {
+            const now = time - FRAME_MS + sub * dt;
+            // Hands get going quickly and lift off at the end.
+            const effort = Math.min(1, now / 250, (WASH_MS - now) / 300);
+            const palms = hands.map((hand) => {
+                // Counter-clockwise on screen, where y points down, means the angle runs backwards.
+                const angle = hand.phase - (now / hand.period) * Math.PI * 2;
+                const speed = ((Math.PI * 2 * HAND_CIRCLE) / hand.period) * dt * effort;
+                // The players lean round as they scrub, so the spots their hands work also drift counter-clockwise.
+                const drift = -(now / WASH_MS) * HEAP_TURN;
+                const x = hand.x * Math.cos(drift) - hand.y * Math.sin(drift);
+                const y = hand.x * Math.sin(drift) + hand.y * Math.cos(drift);
 
-                return {
-                    x,
-                    y,
-                    dx: (tx * Math.cos(swerve) - ty * Math.sin(swerve)) / length,
-                    dy: (tx * Math.sin(swerve) + ty * Math.cos(swerve)) / length,
-                    force: HAND_SHOVE * (0.6 + nextRandom(state) * 0.8),
-                };
-            }),
-        );
+                const px = x + Math.cos(angle) * HAND_CIRCLE;
+                const py = y + Math.sin(angle) * HAND_CIRCLE;
+                const reach = Math.hypot(px, py) || 1;
+                // Players bear down on the stroke that pushes round the table counter-clockwise and ease up on the way back,
+                // so the heap as a whole circulates. Counter-clockwise round the centre at (px, py) is along (py, -px).
+                const along = Math.sin(angle) * (py / reach) - Math.cos(angle) * (-px / reach);
 
-        for (const tile of tiles) {
-            const { pose } = tile;
-            let x = pose.x - CENTER;
-            let y = pose.y - CENTER;
+                return { x: px, y: py, vx: Math.sin(angle) * speed, vy: -Math.cos(angle) * speed, press: 0.5 + 0.5 * along };
+            });
 
-            for (const hand of hands) {
-                const gap = Math.hypot(x - hand.x, y - hand.y);
+            for (const body of bodies) {
+                for (const palm of palms) {
+                    const gap = Math.hypot(body.x - palm.x, body.y - palm.y);
 
-                if (gap < HAND_REACH) {
-                    const push = (1 - gap / HAND_REACH) * hand.force * effort;
+                    if (gap < PALM_RADIUS + TILE_RADIUS) {
+                        // Friction under the palm drags the tile along with the hand.
+                        const grip = (gap < PALM_RADIUS ? 0.6 : 0.3) * palm.press;
 
-                    tile.vx += hand.dx * push + (nextRandom(state) - 0.5) * push;
-                    tile.vy += hand.dy * push + (nextRandom(state) - 0.5) * push;
-                    tile.spin += (nextRandom(state) - 0.5) * push * 5;
+                        body.vx += (palm.vx - body.vx) * grip;
+                        body.vy += (palm.vy - body.vy) * grip;
+                    }
                 }
+
+                body.vx *= 0.82;
+                body.vy *= 0.82;
+                body.x += body.vx;
+                body.y += body.vy;
+                body.rotation += Math.hypot(body.vx, body.vy) * body.twist;
             }
 
-            const distance = Math.hypot(x, y) || 1;
-
-            // Tiles shoved past the edge of the pile get swept back in.
-            if (distance > PILE_RADIUS * 0.8) {
-                tile.vx -= (x / distance) * (distance - PILE_RADIUS * 0.8) * 0.3;
-                tile.vy -= (y / distance) * (distance - PILE_RADIUS * 0.8) * 0.3;
-            }
-
-            tile.vx = tile.vx * 0.7 + (nextRandom(state) - 0.5) * 4 * effort;
-            tile.vy = tile.vy * 0.7 + (nextRandom(state) - 0.5) * 4 * effort;
-            tile.spin *= 0.75;
-
-            const speed = Math.hypot(tile.vx, tile.vy);
-
-            if (speed > 70) {
-                tile.vx *= 70 / speed;
-                tile.vy *= 70 / speed;
-            }
-
-            x += tile.vx;
-            y += tile.vy;
-            pose.x = CENTER + x;
-            pose.y = CENTER + y;
-            pose.rotation += tile.spin;
+            separate(bodies);
         }
 
-        // Tiles pass over and under each other as they are shoved about.
-        if (step % 6 === 0) {
-            for (const tile of tiles) {
-                tile.pose.z = 100 + Math.floor(nextRandom(state) * TILE_COUNT);
-            }
-        }
-
-        frames.push({ poses: tiles.map((tile) => ({ ...tile.pose })), duration: SHUFFLE_STEP_MS, hold: SHUFFLE_STEP_MS, linear: true });
+        frames.push({ poses: posesOf(bodies), duration: FRAME_MS, hold: FRAME_MS, linear: true });
     }
 
     return frames;
@@ -245,8 +289,8 @@ function partial(model: TableModel, hands: number[][], bonus: number[][], faceUp
 
 /** The whole opening: mixing, building the walls, the dice, the deal, and replacing flowers. */
 export function setupFrames(model: TableModel, plan: DealPlan, roll: number[], final: Pose[], random: { random: number }): Frame[] {
-    const pushed = heap(random);
-    const frames: Frame[] = [{ poses: pushed, duration: ms(560), hold: ms(600) }, ...shuffleFrames(pushed, random)];
+    const bodies = heapBodies(random);
+    const frames: Frame[] = [{ poses: posesOf(bodies), duration: 380, hold: 420 }, ...washFrames(bodies, random)];
 
     const built = Array.from({ length: TILE_COUNT }, (_, id) => wallPose(id));
     const lined = rows();
