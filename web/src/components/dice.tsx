@@ -11,7 +11,7 @@ const PIPS: Record<number, number[]> = {
     6: [0, 2, 3, 5, 6, 8],
 };
 
-/** Three dice in the middle of the table. While rolling they tumble; then they settle on the values that were rolled. */
+/** The two dice, thrown onto the felt in front of the dealer. While rolling they tumble; then they settle on the values that were rolled. */
 export function Dice({ values, rolling, roller }: { values: number[]; rolling: boolean; roller: Seat }) {
     const total = values.reduce((sum, value) => sum + value, 0);
     const spot = toStage(roller, 0, 200);

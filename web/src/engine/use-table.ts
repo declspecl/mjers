@@ -2,7 +2,7 @@ import { useGrader } from "../grading/use-grader";
 import { layout } from "../table/layout";
 import { advance, arrange, createModel, reveal, SEATS, type TableModel, takeDraw, wallBreak } from "../table/model";
 import { randomInt } from "../table/random";
-import { type Frame, type Rolls, setupFrames } from "../table/setup";
+import { type Frame, setupFrames } from "../table/setup";
 import type { Mjers } from "./engine";
 import { createLog, type EventLog, type LogEvent, recordMove } from "./event-log";
 import { HUMAN } from "./names";
@@ -23,7 +23,8 @@ export interface TableState {
     hand: number;
     seed: bigint;
     dealer: Seat;
-    rolls: Rolls;
+    /** The dealer's two dice: their total picks the setter and how many stacks the setter counts. */
+    roll: number[];
     model: TableModel;
     observation: Observation;
     humanToAct: boolean;
@@ -58,7 +59,7 @@ function startingSeed(): bigint {
 }
 
 function rollDice(state: { random: number }): number[] {
-    return [0, 0, 0].map(() => 1 + randomInt(state, 6));
+    return [0, 0].map(() => 1 + randomInt(state, 6));
 }
 
 function sum(values: number[]): number {
@@ -84,15 +85,14 @@ export function useTable(mjers: Mjers, settings: Settings) {
     useEffect(() => {
         const seed = match.baseSeed + BigInt(match.hand);
         const dice = { random: Number(seed % 2_147_483_647n) || 1 };
-        const dealerRoll = match.dealer === null ? rollDice(dice) : undefined;
-        const dealer = (match.dealer ?? (sum(dealerRoll!) - 1) % 4) as Seat;
-        const rolls: Rolls = { dealer: dealerRoll, wall: rollDice(dice) };
+        const dealer = match.dealer ?? (randomInt(dice, 4) as Seat);
+        const roll = rollDice(dice);
         const game = new mjers.Game(seed, dealer);
         const bots = new Map(
             SEATS.filter((seat) => seat !== HUMAN).map((seat) => [seat, new mjers.Bot("efficiency", seed * 4n + BigInt(seat))] as const),
         );
         const observation = game.observe(HUMAN);
-        const { model, plan } = createModel(observation, wallBreak(dealer, sum(rolls.wall)), dice.random);
+        const { model, plan } = createModel(observation, wallBreak(dealer, sum(roll)), dice.random);
         const final = layout(model, { order: model.hands[0]!, drawn: null, selected: null });
         const animate = settings.opening && !prefersReducedMotion();
 
@@ -102,12 +102,12 @@ export function useTable(mjers: Mjers, settings: Settings) {
             hand: match.hand,
             seed,
             dealer,
-            rolls,
+            roll,
             model,
             observation,
             humanToAct: game.toAct().includes(HUMAN),
             phase: animate ? "opening" : "play",
-            frames: animate ? setupFrames(model, plan, rolls, final, { random: dice.random ^ 0x5e_ed }) : [],
+            frames: animate ? setupFrames(model, plan, roll, final, { random: dice.random ^ 0x5e_ed }) : [],
             moves: 0,
             result: null,
             settlement: null,

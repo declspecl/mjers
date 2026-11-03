@@ -1,4 +1,4 @@
-import { lying, type Pose, STACKS_PER_WALL, wallPose, WALL_RING } from "./geometry";
+import { CENTER, lying, type Pose, STACKS_PER_WALL, toStage, wallPose, WALL_RING } from "./geometry";
 import { layout, restingPose } from "./layout";
 import { type DealPlan, type TableModel, TILE_COUNT } from "./model";
 import { nextRandom } from "./random";
@@ -11,6 +11,8 @@ export interface Frame {
     duration: number;
     /** Per-tile start delays, for rows that build one tile after another. */
     delays?: number[];
+    /** Linear frames chain into one continuous motion, as the shuffle does. */
+    linear?: boolean;
     /** Time from the start of this frame to the next one. */
     hold: number;
     dice?: DiceView;
@@ -25,25 +27,117 @@ export interface DiceView {
     roller: Seat;
 }
 
-export interface Rolls {
-    /** The first hand's roll that picks the dealer, counted counter-clockwise from you. */
-    dealer?: number[];
-    /** The dealer's roll that picks where the wall breaks. */
-    wall: number[];
-}
-
 const ROW_PITCH = 40;
 const ROW_START = 258;
 
-function scatter(state: { random: number }, radius: number): Pose[] {
+/** Opening pace: every step of the opening runs this much slower than its base timing. */
+const PACE = 1.4;
+
+function ms(base: number): number {
+    return Math.round(base * PACE);
+}
+
+const PILE_RADIUS = 235;
+const SHUFFLE_STEPS = 34;
+const SHUFFLE_STEP_MS = 150;
+/** The whole pile turns this far counter-clockwise each step (screen y points down, so counter-clockwise is negative). */
+const PILE_TURN = -0.11;
+/** Each hand circles this far each step, also counter-clockwise. */
+const HAND_TURN = -0.62;
+const HAND_CIRCLE = 62;
+const HAND_REACH = 78;
+
+/** The same angle as `rotation`, moved by whole turns to lie within half a turn of `target`. */
+function nearestTurn(rotation: number, target: number): number {
+    return rotation - Math.round((rotation - target) / 360) * 360;
+}
+
+/** The tiles pushed face down into one heap in the middle of the table. */
+function heap(state: { random: number }): Pose[] {
     return Array.from({ length: TILE_COUNT }, (_, id) => {
         const angle = nextRandom(state) * Math.PI * 2;
-        const distance = Math.sqrt(nextRandom(state)) * radius;
-        const x = 500 + Math.cos(angle) * distance;
-        const y = 500 + Math.sin(angle) * distance;
+        const distance = Math.sqrt(nextRandom(state)) * PILE_RADIUS;
 
-        return { x, y, rotation: nextRandom(state) * 360, scale: 1, face: "down" as const, z: 100 + id };
+        return {
+            x: CENTER + Math.cos(angle) * distance,
+            y: CENTER + Math.sin(angle) * distance,
+            rotation: nextRandom(state) * 360,
+            scale: 1,
+            face: "down" as const,
+            z: 100 + id,
+        };
     });
+}
+
+/**
+ * Four players mixing with both hands. Each hand circles counter-clockwise over the heap in front of its player and drags the
+ * tiles under it along, while the heap as a whole turns counter-clockwise, so the tiles spiral round the table from hand to hand.
+ * Every frame is one short linear step of that motion.
+ */
+function shuffleFrames(start: Pose[], state: { random: number }): Frame[] {
+    const tiles = start.map((pose) => ({ ...pose }));
+    const hands = ([0, 1, 2, 3] as Seat[]).flatMap((seat) =>
+        [-1, 1].map((side) => ({
+            anchor: toStage(seat, side * 92, 150),
+            phase: seat * (Math.PI / 2) + (side > 0 ? Math.PI : 0) + nextRandom(state) * 0.6,
+        })),
+    );
+    const frames: Frame[] = [];
+
+    for (let step = 1; step <= SHUFFLE_STEPS; step++) {
+        // Hands speed up out of the push and ease off at the end.
+        const effort = Math.min(1, step / 5, (SHUFFLE_STEPS + 1 - step) / 5);
+        const turn = PILE_TURN * effort;
+        const at = hands.map(({ anchor, phase }) => {
+            const angle = phase + step * HAND_TURN;
+            const previous = angle - HAND_TURN * effort;
+
+            return {
+                x: anchor.x + Math.cos(angle) * HAND_CIRCLE,
+                y: anchor.y + Math.sin(angle) * HAND_CIRCLE,
+                dx: (Math.cos(angle) - Math.cos(previous)) * HAND_CIRCLE,
+                dy: (Math.sin(angle) - Math.sin(previous)) * HAND_CIRCLE,
+            };
+        });
+
+        for (const tile of tiles) {
+            let x = tile.x - CENTER;
+            let y = tile.y - CENTER;
+            const cos = Math.cos(turn);
+            const sin = Math.sin(turn);
+
+            [x, y] = [x * cos - y * sin, x * sin + y * cos];
+            tile.rotation += (turn * 180) / Math.PI;
+
+            for (const hand of at) {
+                const gap = Math.hypot(CENTER + x - hand.x, CENTER + y - hand.y);
+                const grip = Math.exp(-(gap * gap) / (2 * HAND_REACH * HAND_REACH));
+
+                x += hand.dx * grip * 1.1;
+                y += hand.dy * grip * 1.1;
+                tile.rotation += (HAND_TURN * 180 * grip * effort) / Math.PI;
+            }
+
+            x += (nextRandom(state) - 0.5) * 6;
+            y += (nextRandom(state) - 0.5) * 6;
+
+            const distance = Math.hypot(x, y);
+
+            if (distance > PILE_RADIUS) {
+                const pull = (PILE_RADIUS + (distance - PILE_RADIUS) * 0.3) / distance;
+
+                x *= pull;
+                y *= pull;
+            }
+
+            tile.x = CENTER + x;
+            tile.y = CENTER + y;
+        }
+
+        frames.push({ poses: tiles.map((tile) => ({ ...tile })), duration: SHUFFLE_STEP_MS, hold: SHUFFLE_STEP_MS, linear: true });
+    }
+
+    return frames;
 }
 
 /**
@@ -76,7 +170,7 @@ function rowDelays(): number[] {
     return Array.from({ length: TILE_COUNT }, (_, id) => {
         const { row, x } = rowSlot(id);
 
-        return (row * 9 + Math.round(4 - x / 35)) * 14;
+        return ms((row * 9 + Math.round(4 - x / 35)) * 14);
     });
 }
 
@@ -117,36 +211,31 @@ function partial(model: TableModel, hands: number[][], bonus: number[][], faceUp
 }
 
 /** The whole opening: mixing, building the walls, the dice, the deal, and replacing flowers. */
-export function setupFrames(model: TableModel, plan: DealPlan, rolls: Rolls, final: Pose[], random: { random: number }): Frame[] {
-    const frames: Frame[] = [{ poses: scatter(random, 250), duration: 520, hold: 560 }];
-
-    for (let pass = 0; pass < 3; pass++) {
-        frames.push({
-            poses: scatter(random, 235),
-            duration: 380,
-            hold: 400,
-            delays: Array.from({ length: TILE_COUNT }, () => nextRandom(random) * 90),
-        });
-    }
+export function setupFrames(model: TableModel, plan: DealPlan, roll: number[], final: Pose[], random: { random: number }): Frame[] {
+    const pushed = heap(random);
+    const frames: Frame[] = [{ poses: pushed, duration: ms(560), hold: ms(600) }, ...shuffleFrames(pushed, random)];
 
     const built = Array.from({ length: TILE_COUNT }, (_, id) => wallPose(id));
+    const lined = rows();
+    const mixed = frames.at(-1)!.poses;
 
     frames.push(
-        { poses: rows(), duration: 240, delays: rowDelays(), hold: 36 * 14 + 320 },
-        { poses: stacked(), duration: 260, hold: 340 },
-        { poses: built, duration: 360, hold: 420 },
+        // The spiral leaves tiles turned many times over; drop whole turns, which looks the same, so none spins back on the way out.
+        { poses: mixed.map((pose, id) => ({ ...pose, rotation: nearestTurn(pose.rotation, lined[id]!.rotation) })), duration: 0, hold: 40 },
+        { poses: lined, duration: ms(240), delays: rowDelays(), hold: ms(36 * 14 + 320) },
+        { poses: stacked(), duration: ms(260), hold: ms(340) },
+        { poses: built, duration: ms(360), hold: ms(420) },
     );
 
-    if (rolls.dealer) {
-        frames.push(
-            { poses: built, duration: 0, hold: 700, dice: { values: rolls.dealer, rolling: true, roller: 0 } },
-            { poses: built, duration: 0, hold: 900, dice: { values: rolls.dealer, rolling: false, roller: 0 }, dealer: model.dealer },
-        );
-    }
+    // The dealer throws two dice. Counting the dealer as one, the total goes counter-clockwise round the seats to the setter, who
+    // then counts that many stacks into the wall.
+    const total = roll.reduce((sum, value) => sum + value, 0);
+    const dice = (rolling: boolean): DiceView => ({ values: roll, rolling, roller: model.dealer });
 
     frames.push(
-        { poses: built, duration: 0, hold: 700, dice: { values: rolls.wall, rolling: true, roller: model.dealer }, dealer: model.dealer },
-        { poses: built, duration: 0, hold: 700, dice: { values: rolls.wall, rolling: false, roller: model.dealer }, dealer: model.dealer },
+        { poses: built, duration: 0, hold: ms(400), dealer: model.dealer },
+        { poses: built, duration: 0, hold: ms(800), dice: dice(true), dealer: model.dealer },
+        { poses: built, duration: 0, hold: ms(900), dice: dice(false), dealer: model.dealer },
     );
 
     // The setter counts stacks from the front of their left wall and turns them down beside their right wall as the flower wall.
@@ -154,10 +243,12 @@ export function setupFrames(model: TableModel, plan: DealPlan, rolls: Rolls, fin
 
     frames.push({
         poses: turnedDown,
-        duration: 520,
-        delays: turnedDown.map((pose, id) => (pose === built[id] || model.flowerSlots[id] === -1 ? 0 : (model.flowerSlots[id] ?? 0) * 18)),
-        hold: 520 + rolls.wall.reduce((sum, value) => sum + value, 0) * 36,
-        dice: { values: rolls.wall, rolling: false, roller: model.dealer },
+        duration: ms(520),
+        delays: turnedDown.map((pose, id) =>
+            pose === built[id] || model.flowerSlots[id] === -1 ? 0 : ms((model.flowerSlots[id] ?? 0) * 18),
+        ),
+        hold: ms(520 + total * 36),
+        dice: dice(false),
         dealer: model.dealer,
     });
 
@@ -172,8 +263,8 @@ export function setupFrames(model: TableModel, plan: DealPlan, rolls: Rolls, fin
                 none,
                 false,
             ),
-            duration: 230,
-            hold: 250,
+            duration: ms(230),
+            hold: ms(250),
             dealer: model.dealer,
         });
     };
@@ -192,7 +283,7 @@ export function setupFrames(model: TableModel, plan: DealPlan, rolls: Rolls, fin
         step(seat, [plan.dealt[seat]![12]!]);
     }
 
-    frames.push({ poses: partial(model, hands, none, true), duration: 320, hold: 520, dealer: model.dealer });
+    frames.push({ poses: partial(model, hands, none, true), duration: ms(320), hold: ms(520), dealer: model.dealer });
 
     const bonus: number[][] = [[], [], [], []];
 
@@ -210,13 +301,13 @@ export function setupFrames(model: TableModel, plan: DealPlan, rolls: Rolls, fin
                 bonus.map((tiles) => [...tiles]),
                 true,
             ),
-            duration: 320,
-            hold: 520,
+            duration: ms(320),
+            hold: ms(520),
             dealer: model.dealer,
         });
     }
 
-    frames.push({ poses: final, duration: 300, hold: 320, dealer: model.dealer });
+    frames.push({ poses: final, duration: ms(300), hold: ms(320), dealer: model.dealer });
 
     return frames;
 }

@@ -18,7 +18,7 @@ import {
     useState,
 } from "react";
 
-const MOVE_MS = 280;
+const MOVE_MS = 340;
 const DRAG_THRESHOLD = 6;
 
 interface Drag {
@@ -272,6 +272,7 @@ export function Stage(props: StageProps) {
                                     zIndex: pose.z,
                                     transitionDuration: dragging ? "0ms" : `${frame ? frame.duration : MOVE_MS}ms`,
                                     transitionDelay: frame?.delays ? `${frame.delays[id] ?? 0}ms` : "0ms",
+                                    transitionTimingFunction: frame?.linear ? "linear" : undefined,
                                 }}
                                 role={inRack || id === pendingFirst ? "button" : undefined}
                                 tabIndex={inRack ? (id === focusable ? 0 : -1) : id === pendingFirst ? 0 : undefined}
