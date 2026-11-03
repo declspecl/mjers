@@ -334,6 +334,17 @@ main > .problem {
     transform: translate(-50%, -50%);
 }
 
+/* In the gap between the table's edge and your rack, at its left end. */
+.sort-hand {
+    position: absolute;
+    top: 89%;
+    left: 2.4%;
+    z-index: 10000;
+    min-height: 36px;
+    padding: 4px 12px;
+    transform: translateY(-50%);
+}
+
 .action-bar .tile-face {
     display: inline-block;
     width: 20px;

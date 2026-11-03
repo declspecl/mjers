@@ -1,5 +1,16 @@
 import { expandCounts } from "../src/engine/tiles";
-import { advance, createModel, reveal, SEATS, type TableModel, takeDraw, TILE_COUNT, wallBreak } from "../src/table/model";
+import {
+    advance,
+    createModel,
+    isHandSorted,
+    reveal,
+    SEATS,
+    sortHand,
+    type TableModel,
+    takeDraw,
+    TILE_COUNT,
+    wallBreak,
+} from "../src/table/model";
 import createMjers from "@mjers/mjers";
 import type { Observation, Seat } from "@mjers/mjers/types";
 import assert from "node:assert/strict";
@@ -111,4 +122,29 @@ test("the table follows every tile through whole hands", async () => {
             for (const bot of bots) bot.free();
         }
     }
+});
+
+function rank(tile: string): number {
+    return "mspz".indexOf(tile.slice(-1)) * 10 + Number(tile.slice(0, -1));
+}
+
+test("sorting puts characters, bamboo, dots, then honors in order and leaves the drawn tile apart", async () => {
+    const mjers = await createMjers();
+    const game = new mjers.Game(7n, 0);
+    const { model } = createModel(game.observe(0), wallBreak(0, 7), 7);
+    const drawn = model.drawn[0];
+    const sorted = sortHand(model);
+    const faces = sorted.hands[0]!.map((id) => sorted.faces[id]!);
+
+    assert.deepEqual(
+        faces,
+        faces.toSorted((a, b) => rank(a) - rank(b)),
+    );
+    assert.deepEqual(
+        sorted.hands[0]!.toSorted((a, b) => a - b),
+        model.hands[0]!.toSorted((a, b) => a - b),
+    );
+    assert.equal(sorted.drawn[0], drawn);
+    assert.ok(isHandSorted(sorted));
+    assert.equal(sortHand(sorted), sorted);
 });

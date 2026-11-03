@@ -7,12 +7,13 @@ import { Stage } from "./components/stage";
 import { loadEngine, type Mjers } from "./engine/engine";
 import { useSettings } from "./engine/settings";
 import { useTable } from "./engine/use-table";
+import { isHandSorted } from "./table/model";
 import type { Tile } from "@mjers/mjers/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 function Match({ mjers }: { mjers: Mjers }) {
     const { settings, update } = useSettings();
-    const { match, table, advice, error, graded, gradingFailure, act, draw, move, hint, finishOpening, nextHand } = useTable(
+    const { match, table, advice, error, graded, gradingFailure, act, draw, move, sort, hint, finishOpening, nextHand } = useTable(
         mjers,
         settings,
     );
@@ -34,12 +35,16 @@ function Match({ mjers }: { mjers: Mjers }) {
             if ((event.key === "d" || event.key === "D") && table?.model.pending.length) {
                 draw();
             }
+
+            if ((event.key === "s" || event.key === "S") && table?.phase === "play") {
+                sort();
+            }
         };
 
         globalThis.addEventListener("keydown", onKey);
 
         return () => globalThis.removeEventListener("keydown", onKey);
-    }, [settings.view, update, table, draw]);
+    }, [settings.view, update, table, draw, sort]);
 
     const faceOf = useCallback((id: number | null): Tile | null => (id === null ? null : (table?.model.faces[id] ?? null)), [table]);
 
@@ -123,6 +128,18 @@ function Match({ mjers }: { mjers: Mjers }) {
                         onDiscard={() => selectedId !== null && discard(selectedId)}
                         onDraw={draw}
                     />
+                    {table.phase === "play" && (
+                        <button
+                            type="button"
+                            className="sort-hand"
+                            disabled={isHandSorted(table.model)}
+                            onClick={sort}
+                            aria-keyshortcuts="S"
+                            title="Sort hand (S)"
+                        >
+                            Sort hand
+                        </button>
+                    )}
                     {settings.feedback && <GradeToast latest={latest?.hand === table.hand ? latest : undefined} />}
                     {table.phase === "over" && table.result && table.settlement && (
                         <Result result={table.result} settlement={table.settlement} totals={match.totals} onNext={nextHand} />

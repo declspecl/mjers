@@ -571,6 +571,41 @@ export function arrange(previous: TableModel, id: number, index: number): TableM
     return model;
 }
 
+/** How you lay out a sorted hand: characters, then bamboo, then dots, then honors. */
+const SUIT_ORDER: Record<string, number> = { m: 0, s: 1, p: 2, z: 3 };
+
+function sortKey(tile: Tile | null | undefined): number {
+    if (!tile) {
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    return (SUIT_ORDER[tile.slice(-1)] ?? 4) * 10 + Number(tile.slice(0, -1));
+}
+
+/** Your hand in sorted order. The tile you just drew stays apart at the right until you place it. */
+export function sortedHand(model: TableModel): number[] {
+    return model.hands[0]!.toSorted((a, b) => sortKey(model.faces[a]) - sortKey(model.faces[b]) || a - b);
+}
+
+export function isHandSorted(model: TableModel): boolean {
+    const sorted = sortedHand(model);
+
+    return model.hands[0]!.every((id, index) => id === sorted[index]);
+}
+
+/** Sorts your hand, keeping the tile you just drew apart. */
+export function sortHand(previous: TableModel): TableModel {
+    if (isHandSorted(previous)) {
+        return previous;
+    }
+
+    const model = clone(previous);
+
+    model.hands[0] = sortedHand(previous);
+
+    return model;
+}
+
 /** Lays every hand face up at the end. The winner's discard joins their hand, and the bots' tiles are sorted for reading. */
 export function reveal(previous: TableModel, hands: Hand[], winner: Seat | null, fromDiscard: boolean): TableModel {
     const model = clone(previous);

@@ -1,6 +1,6 @@
 import { useGrader } from "../grading/use-grader";
 import { layout } from "../table/layout";
-import { advance, arrange, createModel, reveal, SEATS, type TableModel, takeDraw, wallBreak } from "../table/model";
+import { advance, arrange, createModel, reveal, SEATS, sortHand, type TableModel, takeDraw, wallBreak } from "../table/model";
 import { randomInt } from "../table/random";
 import { type Frame, setupFrames } from "../table/setup";
 import type { Mjers } from "./engine";
@@ -243,6 +243,7 @@ export function useTable(mjers: Mjers, settings: Settings) {
 
     const draw = useCallback(() => update(takeDraw), [update]);
     const move = useCallback((id: number, index: number) => update((model) => arrange(model, id, index)), [update]);
+    const sort = useCallback(() => update(sortHand), [update]);
     const act = useCallback((action: Action, discardId?: number) => apply(HUMAN, action, discardId), [apply]);
 
     const hint = useCallback(() => {
@@ -267,6 +268,7 @@ export function useTable(mjers: Mjers, settings: Settings) {
         act,
         draw,
         move,
+        sort,
         hint,
         finishOpening,
         nextHand,
