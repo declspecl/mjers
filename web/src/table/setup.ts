@@ -18,6 +18,14 @@ export interface Frame {
     dice?: DiceView;
     /** The seat the dealer marker sits at, once it is known. */
     dealer?: Seat;
+    /** Your tiles in this frame. Their poses here are placeholders: the stage lays them out for the screen. */
+    rack?: FrameRack;
+}
+
+export interface FrameRack {
+    hand: number[];
+    bonus: number[];
+    faceUp: boolean;
 }
 
 export interface DiceView {
@@ -402,6 +410,7 @@ export function setupFrames(model: TableModel, plan: DealPlan, roll: number[], f
             duration: ms(230),
             hold: ms(250),
             dealer: model.dealer,
+            rack: { hand: [...hands[0]!], bonus: [], faceUp: false },
         });
     };
 
@@ -419,7 +428,13 @@ export function setupFrames(model: TableModel, plan: DealPlan, roll: number[], f
         step(seat, [plan.dealt[seat]![12]!]);
     }
 
-    frames.push({ poses: partial(model, hands, none, true), duration: ms(320), hold: ms(520), dealer: model.dealer });
+    frames.push({
+        poses: partial(model, hands, none, true),
+        duration: ms(320),
+        hold: ms(520),
+        dealer: model.dealer,
+        rack: { hand: [...hands[0]!], bonus: [], faceUp: true },
+    });
 
     const bonus: number[][] = [[], [], [], []];
 
@@ -440,10 +455,17 @@ export function setupFrames(model: TableModel, plan: DealPlan, roll: number[], f
             duration: ms(320),
             hold: ms(520),
             dealer: model.dealer,
+            rack: { hand: [...hands[0]!], bonus: [...bonus[0]!], faceUp: true },
         });
     }
 
-    frames.push({ poses: final, duration: ms(300), hold: ms(320), dealer: model.dealer });
+    frames.push({
+        poses: final,
+        duration: ms(300),
+        hold: ms(320),
+        dealer: model.dealer,
+        rack: { hand: [...model.hands[0]!], bonus: [...model.bonus[0]!], faceUp: true },
+    });
 
     return frames;
 }

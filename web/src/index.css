@@ -80,9 +80,11 @@ main > .problem {
 /* Screen: the table alone, or the table with the analytic column */
 
 .screen {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    min-height: 100dvh;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: 100dvh;
 }
 
 .screen[data-view="analytic"] {
@@ -91,22 +93,28 @@ main > .problem {
 
 .play {
     position: relative;
-    height: 100dvh;
+    grid-row: 1;
+    grid-column: 1;
+    min-height: 0;
 }
 
+/* A room's status bar sits under the table and takes its height from it. */
+.screen > .room-status {
+    grid-row: 2;
+    grid-column: 1;
+}
+
+/* The play area is laid out in script (table/arrangement.ts): the stage is translated and scaled into place, and the overlays read their
+   pixel positions from the custom properties the stage sets. */
 .stage-box {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    padding: 8px;
+    position: absolute;
+    inset: 0;
     overflow: hidden;
 }
 
 .stage-frame {
-    position: relative;
-    flex: none;
+    position: absolute;
+    inset: 0;
 }
 
 .stage {
@@ -114,7 +122,7 @@ main > .problem {
     top: 0;
     left: 0;
     width: 1000px;
-    height: 1160px;
+    height: 1000px;
     transform-origin: 0 0;
     user-select: none;
     -webkit-user-select: none;
@@ -319,30 +327,46 @@ main > .problem {
 
 /* Things laid over the table at normal size */
 
+/* The move buttons rest on a line the layout picks: over the felt by your edge, in their own band above your hand on a tall screen, or
+   in the right margin on a wide one. Extra buttons wrap upward, away from your tiles. */
 .action-bar {
     position: absolute;
-    top: 82.5%;
-    left: 50%;
+    top: var(--actions-y);
+    left: var(--actions-x);
     z-index: 10000;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: wrap-reverse;
     align-items: center;
     justify-content: center;
     gap: 8px;
     width: max-content;
-    max-width: 96%;
-    transform: translate(-50%, -50%);
+    max-width: var(--actions-width);
+    transform: translate(-50%, -100%);
 }
 
-/* In the gap between the table's edge and your rack, at its left end. */
+.stage-box[data-actions="band"] .action-bar {
+    justify-content: flex-end;
+    transform: translate(-100%, -100%);
+}
+
+.stage-box[data-actions="margin"] .action-bar {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    width: var(--actions-width);
+}
+
+.stage-box[data-actions="margin"] .claim-offer {
+    justify-content: center;
+    margin: 0;
+}
+
 .sort-hand {
     position: absolute;
-    top: 89%;
-    left: 2.4%;
+    top: var(--sort-y);
+    left: var(--sort-x);
     z-index: 10000;
-    min-height: 36px;
     padding: 4px 12px;
-    transform: translateY(-50%);
 }
 
 .action-bar .tile-face {
@@ -375,8 +399,8 @@ main > .problem {
 
 .grade-toast {
     position: absolute;
-    top: 65%;
-    left: 50%;
+    top: calc(var(--table-y) + var(--table-size) * 0.66);
+    left: calc(var(--table-x) + var(--table-size) / 2);
     z-index: 10000;
     margin: 0;
     padding: 6px 18px;
@@ -419,12 +443,14 @@ main > .problem {
 
 .result {
     position: absolute;
-    top: 43%;
-    left: 50%;
+    top: calc(var(--table-y) + var(--table-size) / 2);
+    left: calc(var(--table-x) + var(--table-size) / 2);
     z-index: 11000;
     display: grid;
     gap: 12px;
-    width: min(400px, 74%);
+    width: min(400px, calc(100% - 24px));
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
     padding: 16px 18px;
     border-top: 4px solid var(--accent);
     border-radius: 8px;
@@ -456,7 +482,21 @@ main > .problem {
     font-weight: 600;
 }
 
-/* Settings: one control in the corner */
+/* Settings: one control in the corner, and the way out in the other */
+
+.leave-practice {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 12000;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+}
+
+.leave-practice:hover {
+    color: var(--text);
+}
 
 .settings {
     position: absolute;
@@ -540,9 +580,11 @@ button.icon svg {
 
 .side {
     display: grid;
+    grid-row: 1 / -1;
+    grid-column: 2;
     align-content: start;
     gap: 14px;
-    height: 100dvh;
+    min-height: 0;
     padding: 20px 16px;
     overflow-y: auto;
     border-left: 1px solid var(--rule);
@@ -601,15 +643,24 @@ button.icon svg {
 }
 
 @media (max-width: 900px) {
+    /* The analysis follows the table down the page. */
     .screen[data-view="analytic"] {
         grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto;
+        height: auto;
     }
 
     .screen[data-view="analytic"] .play {
-        height: min(100dvh, 118vw);
+        height: 100dvh;
+    }
+
+    .screen[data-view="analytic"] > .room-status {
+        grid-row: auto;
     }
 
     .side {
+        grid-row: auto;
+        grid-column: auto;
         height: auto;
         border-top: 1px solid var(--rule);
         border-left: 0;
@@ -618,8 +669,7 @@ button.icon svg {
 
 @media (max-width: 600px) {
     .action-bar button {
-        min-height: 40px;
-        padding: 6px 10px;
+        padding: 6px 12px;
     }
 
     .grade-toast {

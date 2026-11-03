@@ -1,7 +1,8 @@
 import { seatName, tileName, windName } from "../engine/names";
 import type { TableState } from "../engine/use-table";
-import { type Pose, STAGE_HEIGHT, STAGE_WIDTH, TILE_HEIGHT, TILE_WIDTH, toStage } from "../table/geometry";
-import { layout, rackLayout } from "../table/layout";
+import { arrange, type Arrangement } from "../table/arrangement";
+import { type Pose, TILE_HEIGHT, TILE_WIDTH, toStage } from "../table/geometry";
+import { dropIndex, layout, rackLayout } from "../table/layout";
 import { placedIds, SEATS } from "../table/model";
 import { Dice } from "./dice";
 import { tileArtwork } from "./tile";
@@ -9,6 +10,7 @@ import type { Seat } from "@mjers/mjers/types";
 import {
     type KeyboardEvent,
     type PointerEvent,
+    type CSSProperties,
     type ReactNode,
     useCallback,
     useEffect,
@@ -45,9 +47,9 @@ interface StageProps {
     children?: ReactNode;
 }
 
-/** Fits the fixed-size table into whatever room it has. */
-function useFit(box: React.RefObject<HTMLDivElement | null>): number {
-    const [scale, setScale] = useState(0.5);
+/** Lays the table, your rack and the buttons out for whatever room the play area has, again whenever it changes. */
+function useArrangement(box: React.RefObject<HTMLDivElement | null>): Arrangement {
+    const [size, setSize] = useState({ width: 1000, height: 1200 });
 
     useLayoutEffect(() => {
         const element = box.current;
@@ -57,9 +59,10 @@ function useFit(box: React.RefObject<HTMLDivElement | null>): number {
         }
 
         const measure = () => {
-            const { width, height } = element.getBoundingClientRect();
+            const width = Math.round(element.clientWidth);
+            const height = Math.round(element.clientHeight);
 
-            setScale(Math.max(0.2, Math.min(width / STAGE_WIDTH, height / STAGE_HEIGHT)));
+            setSize((current) => (current.width === width && current.height === height ? current : { width, height }));
         };
         const observer = new ResizeObserver(measure);
 
@@ -69,7 +72,23 @@ function useFit(box: React.RefObject<HTMLDivElement | null>): number {
         return () => observer.disconnect();
     }, [box]);
 
-    return scale;
+    return useMemo(() => arrange(size.width, size.height), [size]);
+}
+
+/** Pixel positions the overlays read from CSS: the table's box, the move buttons and the sort button. */
+function overlayPlaces(arrangement: Arrangement): CSSProperties {
+    const { table, actions, sort } = arrangement;
+
+    return {
+        "--table-x": `${table.x}px`,
+        "--table-y": `${table.y}px`,
+        "--table-size": `${table.size}px`,
+        "--actions-x": `${actions.x}px`,
+        "--actions-y": `${actions.y}px`,
+        "--actions-width": `${actions.width}px`,
+        "--sort-x": `${sort.x}px`,
+        "--sort-y": `${sort.y}px`,
+    } as CSSProperties;
 }
 
 /** Where a seat's name sits: in the strip just inside its hand, where discards never land. Side seats' names run along their edge. */
@@ -89,7 +108,9 @@ export function Stage(props: StageProps) {
     const { table, analytic, selected, suggested, canDiscard, onSelect, onDiscard, onDraw, onMove, onOpeningDone, children } = props;
     const { model, phase, frames, observation } = table;
     const box = useRef<HTMLDivElement>(null);
-    const scale = useFit(box);
+    const arrangement = useArrangement(box);
+    const { scale } = arrangement;
+    const area = arrangement.rack;
     const [drag, setDrag] = useState<Drag | null>(null);
     const [cursor, setCursor] = useState({ hand: -1, index: 0 });
     const frameIndex = cursor.hand === table.hand ? cursor.index : 0;
@@ -116,7 +137,10 @@ export function Stage(props: StageProps) {
         return () => clearTimeout(timer);
     }, [phase, frame, frameIndex, table.hand, onOpeningDone]);
 
-    const base = useMemo(() => rackLayout(model, { order: model.hands[0]!, drawn: model.drawn[0] ?? null, selected }), [model, selected]);
+    const base = useMemo(
+        () => rackLayout(model, { order: model.hands[0]!, drawn: model.drawn[0] ?? null, selected, area }),
+        [model, selected, area],
+    );
 
     const preview = useMemo(() => {
         const hand = model.hands[0]!;
@@ -127,19 +151,36 @@ export function Stage(props: StageProps) {
         }
 
         const slot = base.slots.find((entry) => entry.id === drag.id);
-        const pointer = (slot?.x ?? 0) + drag.dx / scale;
+        const pointer = { x: (slot?.x ?? 0) + drag.dx / scale, y: (slot?.y ?? 0) + drag.dy / scale };
         const others = hand.filter((id) => id !== drag.id);
-        const index = others.filter((id) => (base.slots.find((entry) => entry.id === id)?.x ?? 0) < pointer).length;
+        const index = dropIndex(base.slots, hand, drag.id, pointer);
 
         return { order: [...others.slice(0, index), drag.id, ...others.slice(index)], drawn: drawn === drag.id ? null : drawn, index };
     }, [model, base, drag, scale]);
 
     const poses = useMemo(() => {
         if (frame) {
-            return frame.poses;
+            if (!frame.rack) {
+                return frame.poses;
+            }
+
+            // The opening was laid out before the screen was measured; put your tiles where this screen has them.
+            const { hand, bonus, faceUp } = frame.rack;
+            const view = {
+                ...model,
+                bonus: model.bonus.map((tiles, seat) => (seat === 0 ? bonus : tiles)),
+                melds: model.melds.map(() => []),
+            };
+            const rack = rackLayout(view, { order: hand, drawn: null, selected: null, area }).poses;
+
+            return frame.poses.map((pose, id) => {
+                const placed = rack.get(id);
+
+                return placed ? { ...placed, face: faceUp || !hand.includes(id) ? placed.face : ("down" as const) } : pose;
+            });
         }
 
-        const placed = layout(model, { order: preview.order, drawn: preview.drawn, selected: drag?.moved ? null : selected });
+        const placed = layout(model, { order: preview.order, drawn: preview.drawn, selected: drag?.moved ? null : selected, area });
 
         if (drag?.moved) {
             const start = base.poses.get(drag.id);
@@ -150,7 +191,7 @@ export function Stage(props: StageProps) {
         }
 
         return placed;
-    }, [frame, model, preview, selected, drag, base, scale]);
+    }, [frame, model, preview, selected, drag, base, scale, area]);
 
     const rack = useMemo(
         () => new Set(frame ? [] : [...model.hands[0]!, ...(model.drawn[0] === null ? [] : [model.drawn[0]!])]),
@@ -224,9 +265,19 @@ export function Stage(props: StageProps) {
     const acting = new Set(observation.to_act);
 
     return (
-        <div className="stage-box" ref={box}>
-            <div className="stage-frame" style={{ width: STAGE_WIDTH * scale, height: STAGE_HEIGHT * scale }}>
-                <div className="stage" style={{ transform: `scale(${scale})` }} data-phase={phase}>
+        <div
+            className="stage-box"
+            ref={box}
+            data-layout={arrangement.mode}
+            data-actions={arrangement.actions.place}
+            style={overlayPlaces(arrangement)}
+        >
+            <div className="stage-frame">
+                <div
+                    className="stage"
+                    style={{ transform: `translate(${arrangement.table.x}px, ${arrangement.table.y}px) scale(${scale})` }}
+                    data-phase={phase}
+                >
                     <div className="felt" aria-hidden="true" />
                     {phase !== "opening" &&
                         SEATS.map((seat) => {

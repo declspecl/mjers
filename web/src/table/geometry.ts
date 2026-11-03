@@ -1,8 +1,6 @@
 import type { Seat } from "@mjers/mjers/types";
 
-/** Stage coordinates: a 1000 unit square table with your rack below it. Everything scales together. */
-export const STAGE_WIDTH = 1000;
-export const STAGE_HEIGHT = 1160;
+/** Table coordinates: a 1000 unit square. Your rack is placed around it in the same units, wherever the screen has room. */
 export const CENTER = 500;
 export const TILE_WIDTH = 34;
 export const TILE_HEIGHT = 45;
