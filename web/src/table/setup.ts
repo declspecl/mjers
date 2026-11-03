@@ -50,7 +50,7 @@ const ARM_RADIUS = 42;
 /** Each hand sweeps a loop this big across its player's half of the table, once every this many milliseconds. */
 const HAND_LOOP = 210;
 const HAND_PERIOD = 900;
-const WASH_MS = 6000;
+const WASH_MS = 4500;
 /** The pace the swirl drags the whole mass counter-clockwise toward, in radians a second; friction keeps tiles well short of it. */
 const SWIRL = 10;
 const FRAME_MS = 50;
