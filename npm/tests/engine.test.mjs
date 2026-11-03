@@ -138,6 +138,15 @@ test("advice covers legal actions and seeded playouts are repeatable", () => {
         for (const estimate of sampled.estimates) {
             assert.ok(estimate.samples > 0 && estimate.samples <= config.samples);
             assert.ok(Number.isFinite(estimate.ev));
+            assert.equal(estimate.comparisons.length, sampled.estimates.length);
+            const self = estimate.comparisons.find((entry) => JSON.stringify(entry.action) === JSON.stringify(estimate.action));
+            assert.equal(self.difference, 0);
+            assert.equal(self.stderr, 0);
+            for (const comparison of estimate.comparisons) {
+                const other = sampled.estimates.find((entry) => JSON.stringify(entry.action) === JSON.stringify(comparison.action));
+                assert.ok(Math.abs(comparison.difference - (estimate.ev - other.ev)) < 1e-9);
+                assert.ok(Number.isFinite(comparison.stderr) && comparison.stderr >= 0);
+            }
             assert.ok(estimate.win_rate >= 0 && estimate.win_rate <= 1);
         }
 

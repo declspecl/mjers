@@ -115,6 +115,15 @@ pub fn sample_position(
     })
 }
 
+/// Direct comparison on the same sampled hidden positions and rollout seeds.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Comparison {
+    pub action: Action,
+    /// This estimate's return minus the compared action's return.
+    pub difference: f64,
+    pub stderr: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Estimate {
     pub action: Action,
@@ -128,6 +137,10 @@ pub struct Estimate {
     /// samples, and its standard error. Zero for the first candidate.
     pub difference: f64,
     pub difference_stderr: f64,
+    /// Direct paired comparisons preserve covariance instead of approximating it
+    /// from two baseline-relative errors. Missing in older serialized advice.
+    #[serde(default)]
+    pub comparisons: Vec<Comparison>,
 }
 
 /// Plays each of `actions` out from up to `samples` sampled positions.
@@ -199,6 +212,14 @@ fn paired(
                 deal_in_rate: outcomes.iter().filter(|o| o.dealt_in).count() as f64 / n,
                 difference,
                 difference_stderr,
+                comparisons: actions
+                    .iter()
+                    .zip(&outcomes_by_action)
+                    .map(|(&other, other_outcomes)| {
+                        let (difference, stderr) = mean_and_stderr(outcomes.iter().zip(other_outcomes).map(|(a, b)| a.units - b.units));
+                        Comparison { action: other, difference, stderr }
+                    })
+                    .collect(),
             }
         })
         .collect()
@@ -329,6 +350,61 @@ mod tests {
         assert_eq!(a, b);
         assert_eq!(a.len(), actions.len());
         assert!(a.iter().all(|e| e.samples == 20 && e.ev_stderr >= 0.0));
+    }
+
+    #[test]
+    fn direct_comparisons_cancel_shared_noise_and_are_symmetric() {
+        let game = midgame(7);
+        let seat = game.to_act().first().unwrap();
+        let obs = game.observe(seat);
+        let actions = &obs.legal_actions()[..3];
+        // Two alternatives share large noise relative to the baseline, but one
+        // is exactly two units better on every sampled position.
+        let estimates = paired(&obs, actions, 32, 7, |_, action, seed| {
+            let shared = (seed % 100) as f64;
+            let units = if action == actions[0] {
+                0.0
+            } else if action == actions[1] {
+                shared
+            } else {
+                shared + 2.0
+            };
+            Some(Outcome { units, won: false, dealt_in: false })
+        });
+        assert!(estimates[1].difference_stderr > 1.0);
+        assert_eq!(estimates[2].comparisons[1].difference, 2.0);
+        assert_eq!(estimates[2].comparisons[1].stderr, 0.0);
+        for (i, estimate) in estimates.iter().enumerate() {
+            assert_eq!(estimate.comparisons.len(), actions.len());
+            assert_eq!(estimate.comparisons[i].difference, 0.0);
+            assert_eq!(estimate.comparisons[i].stderr, 0.0);
+            for (j, comparison) in estimate.comparisons.iter().enumerate() {
+                assert_eq!(comparison.action, actions[j]);
+                assert!((comparison.difference + estimates[j].comparisons[i].difference).abs() < 1e-10);
+                assert_eq!(comparison.stderr, estimates[j].comparisons[i].stderr);
+            }
+        }
+    }
+
+    #[test]
+    fn comparison_results_do_not_depend_on_candidate_order() {
+        let game = midgame(7);
+        let seat = game.to_act().first().unwrap();
+        let obs = game.observe(seat);
+        let actions = obs.legal_actions();
+        let rollout = BotSpec::preset("efficiency").unwrap();
+        let original = estimate(&obs, &actions, 8, 19, &rollout, &rollout);
+        let mut reversed_actions = actions.to_vec();
+        reversed_actions.reverse();
+        let reversed = estimate(&obs, &reversed_actions, 8, 19, &rollout, &rollout);
+        for entry in original {
+            let other = reversed.iter().find(|e| e.action == entry.action).unwrap();
+            assert_eq!(entry.ev, other.ev);
+            for comparison in entry.comparisons {
+                let other_comparison = other.comparisons.iter().find(|c| c.action == comparison.action).unwrap();
+                assert_eq!(&comparison, other_comparison);
+            }
+        }
     }
 
     #[test]

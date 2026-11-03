@@ -100,6 +100,12 @@ export interface Assessment {
     immediate_units: number;
     reasons: string[];
 }
+export interface Comparison {
+    action: Action;
+    /** This estimate's return minus the compared action's, using matched samples. */
+    difference: number;
+    stderr: number;
+}
 export interface Estimate {
     action: Action;
     samples: number;
@@ -109,6 +115,8 @@ export interface Estimate {
     deal_in_rate: number;
     difference: number;
     difference_stderr: number;
+    /** Direct paired comparisons. Absent in engines before this field was added. */
+    comparisons?: Comparison[];
 }
 export interface Advice {
     recommended: Action;

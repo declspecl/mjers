@@ -150,6 +150,7 @@ mod best_tests {
             deal_in_rate: 0.0,
             difference,
             difference_stderr,
+            comparisons: Vec::new(),
         }
     }
 

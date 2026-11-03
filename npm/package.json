@@ -1,6 +1,6 @@
 {
     "name": "@mjers/mjers",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Deterministic mahjong engine, hand analysis, bots, and advisor (WebAssembly)",
     "type": "module",
     "main": "./index.js",
