@@ -5,6 +5,10 @@
 //! applied, and bots play the hand out: `own` in the advised seat, `field` in
 //! the others. Every candidate sees the same samples, so differences between
 //! them are not luck of the sample.
+//!
+//! [`estimate_values`] instead stops each playout at the advised seat's next
+//! choice and scores it with a network's value head, which removes most of the
+//! luck still to come in the hand.
 
 use std::sync::Arc;
 
@@ -13,7 +17,12 @@ use serde::{
     Serialize,
 };
 
-use crate::bot::policy::play_out;
+use crate::bot::encoding;
+use crate::bot::neural::ResidualNet;
+use crate::bot::policy::{
+    Policy,
+    play_out,
+};
 use crate::bot::spec::BotSpec;
 use crate::game::Game;
 use crate::game::action::{
@@ -132,17 +141,41 @@ pub fn estimate(
     own: &BotSpec,
     field: &BotSpec,
 ) -> Vec<Estimate> {
-    let seat = obs.seat();
     let rules = Arc::new(obs.rules().clone());
+    paired(obs, actions, samples, seed, |position, action, seed| {
+        play_from(&rules, position, obs.seat(), action, [own, field], seed)
+    })
+}
+
+/// Like [`estimate`], but each playout stops when the advised seat next has a
+/// real choice (its wins and forced moves are played, as in training), and
+/// scores that position by `net`'s predicted settlement. Hands that end
+/// sooner score their settlement.
+pub fn estimate_values(
+    obs: &Observation<'_>,
+    actions: &[Action],
+    samples: u32,
+    seed: u64,
+    net: &ResidualNet,
+    field: &BotSpec,
+) -> Vec<Estimate> {
+    let rules = Arc::new(obs.rules().clone());
+    paired(obs, actions, samples, seed, |position, action, seed| value_from(&rules, position, obs.seat(), action, net, field, seed))
+}
+
+fn paired(
+    obs: &Observation<'_>,
+    actions: &[Action],
+    samples: u32,
+    seed: u64,
+    play: impl Fn(&Position, Action, u64) -> Option<Outcome>,
+) -> Vec<Estimate> {
     let mut outcomes_by_action: Vec<Vec<Outcome>> = vec![Vec::with_capacity(samples as usize); actions.len()];
     for i in 0..samples as u64 {
         let Some(position) = sample_position(obs, &mut Rng::seed(derive_seed(seed, i))) else {
             continue;
         };
-        let played: Option<Vec<Outcome>> = actions
-            .iter()
-            .map(|&action| play_from(&rules, &position, seat, action, [own, field], derive_seed(seed ^ 0x5EED, i)))
-            .collect();
+        let played: Option<Vec<Outcome>> = actions.iter().map(|&action| play(&position, action, derive_seed(seed ^ 0x5EED, i))).collect();
         if let Some(played) = played {
             for (outcomes, outcome) in outcomes_by_action.iter_mut().zip(played) {
                 outcomes.push(outcome);
@@ -191,6 +224,43 @@ fn play_from(
     game.apply(seat, action).ok()?;
     let mut policies = std::array::from_fn(|k| if k == seat.index() { own } else { field }.build(derive_seed(seed, k as u64)));
     play_out(&mut game, &mut policies).ok()?;
+    ended(&game, seat)
+}
+
+fn value_from(
+    rules: &Arc<Ruleset>,
+    position: &Position,
+    seat: Seat,
+    action: Action,
+    net: &ResidualNet,
+    field: &BotSpec,
+    seed: u64,
+) -> Option<Outcome> {
+    let mut game = Game::resume(rules.clone(), position.clone()).ok()?;
+    game.apply(seat, action).ok()?;
+    let mut policies: [Box<dyn Policy>; SEATS] = std::array::from_fn(|k| field.build(derive_seed(seed, k as u64)));
+    while let Some(next) = game.to_act().first() {
+        let observation = game.observe(next);
+        let legal = observation.legal_actions();
+        let action = if next != seat {
+            policies[next.index()].act(&observation, &legal)
+        } else if let Some(&win) = legal.iter().find(|a| matches!(a, Action::Win | Action::SelfDrawWin)) {
+            win
+        } else if let [only] = legal[..] {
+            only
+        } else {
+            let units = f64::from(net.evaluate(&encoding::encode(&observation)).settlement);
+            return Some(Outcome { units, won: false, dealt_in: false });
+        };
+        game.apply(next, action).ok()?;
+    }
+    ended(&game, seat)
+}
+
+fn ended(
+    game: &Game,
+    seat: Seat,
+) -> Option<Outcome> {
     let units = game.settlement()?.total()[seat.index()] as f64;
     let win = game.result()?.win;
     Some(Outcome {
@@ -259,5 +329,22 @@ mod tests {
         assert_eq!(a, b);
         assert_eq!(a.len(), actions.len());
         assert!(a.iter().all(|e| e.samples == 20 && e.ev_stderr >= 0.0));
+    }
+
+    #[test]
+    fn value_estimates_are_paired_and_stop_before_the_hand_ends() {
+        let net = ResidualNet::new(&crate::bot::neural::tests::random_weights(4, 1, 5)).unwrap();
+        let field = BotSpec::preset("efficiency").unwrap();
+        for seed in 0..10 {
+            let game = midgame(seed);
+            let Some(seat) = game.to_act().first() else { continue };
+            let obs = game.observe(seat);
+            let actions = obs.legal_actions();
+            let a = estimate_values(&obs, &actions, 8, 2, &net, &field);
+            assert_eq!(a, estimate_values(&obs, &actions, 8, 2, &net, &field));
+            assert_eq!((a[0].difference, a[0].difference_stderr), (0.0, 0.0));
+            // Settlements are whole units; the value head's predictions are not.
+            assert!(a.iter().any(|e| e.ev.fract() != 0.0), "seed {seed}");
+        }
     }
 }

@@ -45,6 +45,7 @@ pub fn strategy(name_or_path: &str) -> anyhow::Result<BotSpec> {
                 margin: search.margin,
                 seed: search.seed,
                 field: strategy(&search.field)?,
+                bootstrap: search.bootstrap,
             }),
         });
     }
@@ -84,6 +85,8 @@ struct SearchFileConfig {
     margin: f64,
     seed: u64,
     field: String,
+    #[serde(default)]
+    bootstrap: bool,
 }
 
 /// `{"kind": "hybrid", "name": ..., "turns": "<strategy>", "claims": "<strategy>"}`,

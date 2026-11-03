@@ -5,6 +5,8 @@
 //! out on the same sampled deals, with the network in this seat and `field`
 //! in the others, and another candidate replaces the favourite only when it
 //! leads by more than `margin` standard errors of the paired difference.
+//! With `bootstrap`, playouts stop at the seat's next choice and the network's
+//! value head scores it (`montecarlo::estimate_values`).
 
 use serde::{
     Deserialize,
@@ -14,6 +16,7 @@ use serde::{
 use crate::advisor::montecarlo::{
     Estimate,
     estimate,
+    estimate_values,
 };
 use crate::bot::encoding;
 use crate::bot::neural::NeuralNetwork;
@@ -37,6 +40,10 @@ pub struct SearchConfig {
     pub seed: u64,
     /// Policy of the other seats during playouts.
     pub field: BotSpec,
+    /// Score playouts by the network's value at the seat's next choice
+    /// instead of playing to the end of the hand.
+    #[serde(default)]
+    pub bootstrap: bool,
 }
 
 pub struct SearchBot {
@@ -104,11 +111,15 @@ pub fn search(
         return Search { choices, estimates: Vec::new() };
     }
     let candidates: Vec<Action> = choices.iter().take(config.candidates).map(|&(action, _)| action).collect();
-    let own = BotSpec::Neural {
-        name: network.checkpoint().into(),
-        network: network.clone(),
+    let estimates = if config.bootstrap {
+        estimate_values(observation, &candidates, config.samples, seed, network.net(), &config.field)
+    } else {
+        let own = BotSpec::Neural {
+            name: network.checkpoint().into(),
+            network: network.clone(),
+        };
+        estimate(observation, &candidates, config.samples, seed, &own, &config.field)
     };
-    let estimates = estimate(observation, &candidates, config.samples, seed, &own, &config.field);
     Search { choices, estimates }
 }
 
@@ -148,7 +159,10 @@ mod tests {
         NeuralNetwork::new("random", ResidualNet::new(&random_weights(4, 1, 11)).unwrap())
     }
 
-    fn config(margin: f64) -> SearchConfig {
+    fn config(
+        margin: f64,
+        bootstrap: bool,
+    ) -> SearchConfig {
         SearchConfig {
             samples: 4,
             candidates: 2,
@@ -156,6 +170,7 @@ mod tests {
             margin,
             seed: 3,
             field: BotSpec::preset("efficiency").unwrap(),
+            bootstrap,
         }
     }
 
@@ -173,19 +188,21 @@ mod tests {
     #[test]
     fn playouts_that_never_convince_leave_the_network_s_play() {
         for seed in 0..3 {
-            let searched = play(seed, Box::new(SearchBot::new("search", network(), config(f64::INFINITY), seed)));
+            let searched = play(seed, Box::new(SearchBot::new("search", network(), config(f64::INFINITY, false), seed)));
             assert_eq!(searched, play(seed, Box::new(NeuralBot::new("net", network().net().clone()))));
         }
     }
 
     #[test]
     fn searching_plays_deterministic_legal_hands() {
-        let searched = |seed| play(seed, Box::new(SearchBot::new("search", network(), config(0.0), seed)));
-        let mut changed = false;
-        for seed in 0..4 {
-            assert_eq!(searched(seed), searched(seed));
-            changed |= searched(seed) != play(seed, Box::new(NeuralBot::new("net", network().net().clone())));
+        for bootstrap in [false, true] {
+            let searched = |seed| play(seed, Box::new(SearchBot::new("search", network(), config(0.0, bootstrap), seed)));
+            let mut changed = false;
+            for seed in 0..4 {
+                assert_eq!(searched(seed), searched(seed));
+                changed |= searched(seed) != play(seed, Box::new(NeuralBot::new("net", network().net().clone())));
+            }
+            assert!(changed, "a zero margin follows any playout lead (bootstrap {bootstrap})");
         }
-        assert!(changed, "a zero margin follows any playout lead");
     }
 }
