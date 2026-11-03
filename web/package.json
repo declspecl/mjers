@@ -1,0 +1,50 @@
+{
+    "name": "@mjers/web",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "engine": "npm run build --prefix ../npm",
+        "predev": "pnpm run engine",
+        "prebuild": "pnpm run engine",
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview",
+        "lint": "pnpm exec eslint --cache --cache-location .cache/eslint . --fix",
+        "lint:check": "pnpm exec eslint --cache --cache-location .cache/eslint-check . --max-warnings=0",
+        "prettier": "pnpm exec prettier --cache --cache-location .cache/prettier --ignore-path .prettierignore . --write",
+        "prettier:check": "pnpm exec prettier --cache --cache-location .cache/prettier --ignore-path .prettierignore . --check",
+        "check-types": "pnpm exec tsc --noEmit",
+        "test": "tsx --test tests/*.test.ts",
+        "clean": "rm -rf dist .cache",
+        "fullclean": "pnpm run clean && rm -rf node_modules"
+    },
+    "dependencies": {
+        "@mjers/mjers": "link:../npm",
+        "react": "catalog:",
+        "react-dom": "catalog:"
+    },
+    "devDependencies": {
+        "@eslint/js": "catalog:",
+        "@trivago/prettier-plugin-sort-imports": "catalog:",
+        "@types/node": "catalog:",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
+        "@vitejs/plugin-react": "catalog:",
+        "eslint": "catalog:",
+        "eslint-config-prettier": "catalog:",
+        "eslint-plugin-react": "catalog:",
+        "eslint-plugin-react-hooks": "catalog:",
+        "eslint-plugin-unicorn": "catalog:",
+        "globals": "catalog:",
+        "prettier": "catalog:",
+        "tsx": "catalog:",
+        "typescript": "catalog:",
+        "typescript-eslint": "catalog:",
+        "vite": "catalog:"
+    },
+    "prettier": "./prettier.config.mjs",
+    "packageManager": "pnpm@12.6.0",
+    "engines": {
+        "node": ">=24"
+    }
+}

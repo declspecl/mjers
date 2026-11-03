@@ -5,3 +5,6 @@ __pycache__/
 *.pyd
 /.mypy_cache
 /.ruff_cache
+/web/node_modules
+/web/dist
+/web/.cache

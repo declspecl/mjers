@@ -1,0 +1,11 @@
+:root {
+    color-scheme: light dark;
+    --bg: light-dark(#f6f5f1, #15171a);
+    --fg: light-dark(#1d2024, #e8e9ea);
+    --muted: light-dark(#5d636b, #9aa0a8);
+    --surface: light-dark(#ffffff, #1f2227);
+    --border: light-dark(#d9d7cf, #333840);
+    --accent: light-dark(#1f6f50, #5fbf96);
+    --font: system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
