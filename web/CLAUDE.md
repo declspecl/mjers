@@ -1,18 +1,27 @@
 # mjers web
 
-Single Vite and React app that plays the engine in the browser through `@mjers/mjers` (linked from `../npm`).
+Single Vite and React app that plays the engine in the browser through `@mjers/mjers`, installed from npm (published from `../npm` by pushing a `v*` tag).
 
 ## Commands
 
 ```sh
 pnpm install
-pnpm dev                # rebuilds the wasm (predev), then serves on :5173
-pnpm build              # rebuilds the wasm (prebuild), then vite build
+pnpm dev                # serves on :5173
+pnpm build              # vite build
 pnpm test               # engine test and design rules
 pnpm run lint:check     # eslint, zero warnings
 pnpm run check-types
 pnpm run prettier       # write; prettier:check to verify
+pnpm run deploy         # build, then upload dist to Cloudflare Pages (uses the `cf auth login` session)
 ```
+
+## Engine changes
+
+The site uses the published engine. To try unpublished engine changes, run `npm run build --prefix ../npm` and `pnpm link ../npm`; run `pnpm install` to go back. To ship them, bump `npm/package.json`, push a matching `v*` tag (`.github/workflows/publish-wasm.yml` publishes it), then raise `@mjers/mjers` in the catalog.
+
+## Deploy
+
+Cloudflare Pages project `mjers` (`wrangler.jsonc`). `.github/workflows/deploy-web.yml` checks and builds the app on pushes to `main` that touch `web/`, then runs `scripts/deploy.mjs` (`wrangler pages deploy`) with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. `public/_headers` marks hashed `/assets/*` immutable.
 
 ## Layout
 

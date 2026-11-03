@@ -1,0 +1,7 @@
+{
+    // Cloudflare Pages project for the web app. `pnpm run deploy` (or CI) uploads ./dist.
+    "$schema": "./node_modules/wrangler/config-schema.json",
+    "name": "mjers",
+    "pages_build_output_dir": "./dist",
+    "compatibility_date": "2026-11-01",
+}

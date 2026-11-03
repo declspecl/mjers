@@ -7,9 +7,5 @@ export default defineConfig({
     server: {
         port: 5173,
         strictPort: true,
-        fs: {
-            // The engine package is linked from ../npm, outside this root.
-            allow: [".."],
-        },
     },
 });

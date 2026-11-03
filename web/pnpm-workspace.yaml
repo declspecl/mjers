@@ -3,8 +3,10 @@ packages:
 
 allowBuilds:
     esbuild: true
+    workerd: true
 
 catalog:
+    "@mjers/mjers": ^0.1.0
     "@eslint/js": ^9.39.1
     "@trivago/prettier-plugin-sort-imports": ^6.0.2
     "@types/node": ^24.13.3
@@ -24,3 +26,7 @@ catalog:
     typescript: ^6.0.3
     typescript-eslint: ^8.65.0
     vite: 8.1.5
+    wrangler: ^4.151.3
+
+minimumReleaseAgeExclude:
+    - "@mjers/*"

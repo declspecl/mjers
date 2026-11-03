@@ -44,13 +44,15 @@ const CORNER_REACH = 540;
 const HEAP_RADIUS = 280;
 /** Tiles are treated as discs this wide when they knock into each other. */
 const TILE_RADIUS = 20;
-const PALM_RADIUS = 62;
-/** Each hand scrubs loops this big, once every this many milliseconds, while working its way over its player's side. */
-const HAND_LOOP = 120;
-const HAND_PERIOD = 460;
-const WASH_MS = 5000;
+/** A flat hand with its fingers spread covers this much; the forearm behind it plows a band this wide. */
+const PALM_RADIUS = 105;
+const ARM_RADIUS = 42;
+/** Each hand sweeps a loop this big across its player's half of the table, once every this many milliseconds. */
+const HAND_LOOP = 210;
+const HAND_PERIOD = 900;
+const WASH_MS = 6000;
 /** The whole mass swirls counter-clockwise this fast, in radians a second, fastest partway out. */
-const SWIRL = 2.6;
+const SWIRL = 10;
 const FRAME_MS = 50;
 const SUBSTEPS = 5;
 
@@ -169,21 +171,20 @@ function posesOf(bodies: Body[]): Pose[] {
 }
 
 /**
- * Washing the tiles: all four players lay both palms flat on the face-down tiles and scrub them all over the table in big, fast
- * loops, every hand going counter-clockwise, while the whole mass swirls counter-clockwise round the table. Tiles under a palm
- * are carried with it; the rest are knocked aside, since tiles are solid and never pass through each other. A small simulation
- * runs the motion, sampled into short linear frames.
+ * Washing the tiles: all four players lean in and sweep both hands, palms flat and arms behind them, in huge counter-clockwise
+ * loops across their half of the table. Each hand carries a big armful of tiles with it, each arm plows the tiles in its way,
+ * and together they swirl the whole mass round and round the table. Tiles are solid and knock each other aside. A small
+ * simulation runs the motion, sampled into short linear frames.
  */
 function washFrames(bodies: Body[], state: { random: number }): Frame[] {
     const hands = ([0, 1, 2, 3] as Seat[]).flatMap((seat) =>
         [-1, 1].map((side) => ({
             seat,
             side,
-            phase: nextRandom(state) * Math.PI * 2,
-            period: HAND_PERIOD * (0.8 + nextRandom(state) * 0.4),
-            // Each hand roams over its player's side of the table on its own slow path.
-            roam: nextRandom(state) * Math.PI * 2,
-            roamPeriod: 1300 + nextRandom(state) * 900,
+            // A player's two hands sweep half a loop apart, so one is always pushing while the other comes back round.
+            phase: seat * 1.3 + (side > 0 ? Math.PI : 0) + nextRandom(state) * 0.5,
+            period: HAND_PERIOD * (0.9 + nextRandom(state) * 0.2),
+            shoulder: toStage(seat, side * 150, 600),
         })),
     );
     const frames: Frame[] = [];
@@ -195,40 +196,67 @@ function washFrames(bodies: Body[], state: { random: number }): Frame[] {
             // Hands get going quickly and lift off at the end.
             const effort = Math.min(1, now / 300, (WASH_MS - now) / 400);
             const palms = hands.map((hand) => {
-                const roam = hand.roam + (now / hand.roamPeriod) * Math.PI * 2;
-                const anchor = toStage(hand.seat, hand.side * (150 + Math.sin(roam) * 110), 170 + Math.cos(roam * 0.7) * 150);
                 // Counter-clockwise on screen, where y points down, means the angle runs backwards.
                 const angle = hand.phase - (now / hand.period) * Math.PI * 2;
                 const speed = ((Math.PI * 2 * HAND_LOOP) / hand.period) * dt * effort;
+                const centre = toStage(hand.seat, hand.side * 110, 210);
+
+                const x = centre.x - CENTER + Math.cos(angle) * HAND_LOOP;
+                const y = centre.y - CENTER + Math.sin(angle) * HAND_LOOP;
+                const reach = Math.hypot(x, y) || 1;
+                // Players bear down on the sweep that carries tiles counter-clockwise round the table, along (y, -x), and
+                // lighten their hands coming back.
+                const along = Math.sin(angle) * (y / reach) + Math.cos(angle) * (x / reach);
 
                 return {
-                    x: anchor.x - CENTER + Math.cos(angle) * HAND_LOOP,
-                    y: anchor.y - CENTER + Math.sin(angle) * HAND_LOOP,
+                    x,
+                    y,
                     vx: Math.sin(angle) * speed,
                     vy: -Math.cos(angle) * speed,
+                    press: 0.2 + 0.8 * Math.max(0, along),
+                    sx: hand.shoulder.x - CENTER,
+                    sy: hand.shoulder.y - CENTER,
                 };
             });
 
             for (const body of bodies) {
                 // The swirl: counter-clockwise round the centre is along (y, -x).
                 const distance = Math.hypot(body.x, body.y);
-                const swirl = SWIRL * (dt / 1000) * effort * Math.min(1, distance / 200);
-
+                const swirl = SWIRL * (dt / 1000) * effort * Math.min(1, distance / 180);
                 // Players keep raking tiles off the rim back into the middle.
-                const rake = distance > 270 ? ((distance - 270) / distance) * 0.004 * effort : 0;
+                const rake = distance > 300 ? ((distance - 300) / distance) * 0.004 * effort : 0;
 
-                body.vx += (body.y * swirl - body.vx) * 0.05 - body.x * rake;
-                body.vy += (-body.x * swirl - body.vy) * 0.05 - body.y * rake;
+                body.vx += (body.y * swirl - body.vx) * 0.1 - body.x * rake;
+                body.vy += (-body.x * swirl - body.vy) * 0.1 - body.y * rake;
 
                 for (const palm of palms) {
                     const gap = Math.hypot(body.x - palm.x, body.y - palm.y);
 
-                    if (gap < PALM_RADIUS + TILE_RADIUS) {
-                        // Friction under the palm drags the tile along with the hand; at its edge the hand flicks tiles away.
-                        const grip = gap < PALM_RADIUS ? 0.6 : 0.2;
+                    if (gap < PALM_RADIUS) {
+                        // Friction under the palm drags the tile along with the hand, hardest under its middle.
+                        const grip = (0.35 + 0.35 * (1 - gap / PALM_RADIUS)) * palm.press;
 
                         body.vx += (palm.vx - body.vx) * grip;
                         body.vy += (palm.vy - body.vy) * grip;
+                        continue;
+                    }
+
+                    // The forearm, from the shoulder at the table edge to the wrist, shoves tiles along with it.
+                    const ax = palm.x - palm.sx;
+                    const ay = palm.y - palm.sy;
+                    const along = Math.max(0, Math.min(1, ((body.x - palm.sx) * ax + (body.y - palm.sy) * ay) / (ax * ax + ay * ay)));
+                    const nx = body.x - (palm.sx + ax * along);
+                    const ny = body.y - (palm.sy + ay * along);
+                    const off = Math.hypot(nx, ny);
+
+                    // An arm only plows while its hand bears down; coming back, it lifts over the tiles.
+                    if (palm.press > 0.5 && off < ARM_RADIUS && off > 0) {
+                        const push = (ARM_RADIUS - off) / off;
+
+                        body.x += nx * push;
+                        body.y += ny * push;
+                        body.vx += (palm.vx * along - body.vx) * 0.3;
+                        body.vy += (palm.vy * along - body.vy) * 0.3;
                     }
                 }
 

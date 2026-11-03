@@ -3,12 +3,10 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "engine": "npm run build --prefix ../npm",
-        "predev": "pnpm run engine",
-        "prebuild": "pnpm run engine",
         "dev": "vite",
         "build": "vite build",
         "preview": "vite preview",
+        "deploy": "pnpm run build && node scripts/deploy.mjs",
         "lint": "pnpm exec eslint --cache --cache-location .cache/eslint . --fix",
         "lint:check": "pnpm exec eslint --cache --cache-location .cache/eslint-check . --max-warnings=0",
         "prettier": "pnpm exec prettier --cache --cache-location .cache/prettier --ignore-path .prettierignore . --write",
@@ -19,7 +17,7 @@
         "fullclean": "pnpm run clean && rm -rf node_modules"
     },
     "dependencies": {
-        "@mjers/mjers": "link:../npm",
+        "@mjers/mjers": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:"
     },
@@ -40,7 +38,8 @@
         "tsx": "catalog:",
         "typescript": "catalog:",
         "typescript-eslint": "catalog:",
-        "vite": "catalog:"
+        "vite": "catalog:",
+        "wrangler": "catalog:"
     },
     "prettier": "./prettier.config.mjs",
     "packageManager": "pnpm@12.6.0",
