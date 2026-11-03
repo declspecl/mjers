@@ -51,7 +51,7 @@ const ARM_RADIUS = 42;
 const HAND_LOOP = 210;
 const HAND_PERIOD = 900;
 const WASH_MS = 6000;
-/** The whole mass swirls counter-clockwise this fast, in radians a second, fastest partway out. */
+/** The pace the swirl drags the whole mass counter-clockwise toward, in radians a second; friction keeps tiles well short of it. */
 const SWIRL = 10;
 const FRAME_MS = 50;
 const SUBSTEPS = 5;
