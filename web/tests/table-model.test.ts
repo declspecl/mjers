@@ -1,8 +1,11 @@
 import { expandCounts } from "../src/engine/tiles";
+import { rotateObservation } from "../src/remote/rotate";
 import {
     advance,
     createModel,
     isHandSorted,
+    matches,
+    restoreModel,
     reveal,
     SEATS,
     sortHand,
@@ -147,4 +150,55 @@ test("sorting puts characters, bamboo, dots, then honors in order and leaves the
     assert.equal(sorted.drawn[0], drawn);
     assert.ok(isHandSorted(sorted));
     assert.equal(sortHand(sorted), sorted);
+});
+
+test("a remote seat can be restored mid-hand and followed through updates that carry several moves", async () => {
+    const mjers = await createMjers();
+
+    for (let hand = 0; hand < 24; hand++) {
+        const seed = BigInt(5000 + hand);
+        const me = (hand % 4) as Seat;
+        const game = new mjers.Game(seed, ((hand >> 2) % 4) as Seat);
+        const bots = SEATS.map((seat) => new mjers.Bot("efficiency", seed * 4n + BigInt(seat)));
+        const wall = wallBreak(rotateObservation(game.observe(me), me).dealer, 2 + (hand % 11));
+        let model = restoreModel(rotateObservation(game.observe(me), me), wall, hand);
+        let restores = 0;
+
+        try {
+            check(model, rotateObservation(game.observe(me), me), `hand ${hand} start`);
+
+            for (let step = 0; !game.isOver() && step < 500; step++) {
+                const seat = game.toAct()[0]!;
+
+                game.apply(seat, bots[seat]!.choose(game, seat));
+
+                // The server sends one update per human decision; bots' moves in between arrive together.
+                if (game.isOver() || (!game.toAct().includes(me) && step % 5 !== 0)) {
+                    continue;
+                }
+
+                while (model.pending.length > 0) {
+                    model = takeDraw(model);
+                }
+
+                const observation = rotateObservation(game.observe(me), me);
+                const followed = advance(model, observation);
+
+                if (matches(followed, observation)) {
+                    model = followed;
+                } else {
+                    restores++;
+                    model = restoreModel(observation, wall, hand);
+                }
+
+                check(model, observation, `hand ${hand} step ${step}`);
+                check(restoreModel(observation, wall, hand), observation, `hand ${hand} step ${step} restored`);
+            }
+
+            assert.ok(restores < 4, `hand ${hand}: ${restores} restores`);
+        } finally {
+            game.free();
+            for (const bot of bots) bot.free();
+        }
+    }
 });

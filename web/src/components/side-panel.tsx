@@ -115,7 +115,7 @@ export function SidePanel({ table, advice, error, graded, feedback, gradingFailu
 
             {error !== undefined && (
                 <p className="problem" role="alert">
-                    The engine rejected that move: {error}. Pick another action.
+                    {error}
                 </p>
             )}
 

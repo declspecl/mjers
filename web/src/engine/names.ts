@@ -10,8 +10,15 @@ const HONORS = ["East wind", "South wind", "West wind", "North wind", "White dra
 const FLOWERS = ["Plum", "Orchid", "Chrysanthemum", "Bamboo flower"];
 const SEASONS = ["Spring", "Summer", "Autumn", "Winter"];
 
+let customNames: readonly string[] | null = null;
+
+/** Names for a multiplayer table, in view order (you first, then right, across, left). Null restores the practice names. */
+export function setSeatNames(names: readonly string[] | null) {
+    customNames = names;
+}
+
 export function seatName(seat: Seat): string {
-    return SEAT_NAMES[seat];
+    return customNames?.[seat] ?? SEAT_NAMES[seat];
 }
 
 export function windName(seat: Seat, dealer: Seat): string {

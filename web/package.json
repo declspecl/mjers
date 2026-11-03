@@ -17,9 +17,14 @@
         "fullclean": "pnpm run clean && rm -rf node_modules"
     },
     "dependencies": {
+        "@hookform/resolvers": "catalog:",
         "@mjers/mjers": "catalog:",
+        "@tanstack/react-router": "catalog:",
         "react": "catalog:",
-        "react-dom": "catalog:"
+        "react-dom": "catalog:",
+        "react-hook-form": "catalog:",
+        "zod": "catalog:",
+        "zustand": "catalog:"
     },
     "devDependencies": {
         "@eslint/js": "catalog:",

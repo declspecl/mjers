@@ -27,13 +27,15 @@ interface ResultProps {
     result: HandResult;
     settlement: Settlement;
     totals: number[];
-    onNext: () => void;
+    /** Missing when someone else deals the next hand; `waiting` then says who. */
+    onNext?: () => void;
+    waiting?: string;
 }
 
 const SEATS: Seat[] = [0, 1, 2, 3];
 
 /** The outcome of a finished hand, laid over the middle of the table so the revealed hands stay in view. */
-export function Result({ result, settlement, totals, onNext }: ResultProps) {
+export function Result({ result, settlement, totals, onNext, waiting }: ResultProps) {
     return (
         <section className="result" aria-label="Hand result">
             <h2>{headline(result)}</h2>
@@ -55,9 +57,13 @@ export function Result({ result, settlement, totals, onNext }: ResultProps) {
                     ))}
                 </tbody>
             </table>
-            <button type="button" className="primary" onClick={onNext} autoFocus>
-                Deal the next hand
-            </button>
+            {onNext ? (
+                <button type="button" className="primary" onClick={onNext} autoFocus>
+                    Deal the next hand
+                </button>
+            ) : (
+                <p role="status">{waiting ?? "Waiting for the next hand."}</p>
+            )}
         </section>
     );
 }

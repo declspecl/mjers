@@ -52,10 +52,8 @@ interface Live {
     log: EventLog;
 }
 
-function startingSeed(): bigint {
-    const given = new URLSearchParams(globalThis.location.search).get("seed");
-
-    return given !== null && /^\d+$/.test(given) ? BigInt(given) : BigInt(Math.floor(Math.random() * 1_000_000));
+function startingSeed(given: string | undefined): bigint {
+    return given === undefined ? BigInt(Math.floor(Math.random() * 1_000_000)) : BigInt(given);
 }
 
 function rollDice(state: { random: number }): number[] {
@@ -67,8 +65,8 @@ function sum(values: number[]): number {
 }
 
 /** Plays a match: you at seat 0 and the engine's bots at the other three, with the dealer passing round every hand. */
-export function useTable(mjers: Mjers, settings: Settings) {
-    const [match, setMatch] = useState<MatchState>(() => ({ hand: 0, baseSeed: startingSeed(), dealer: null, totals: [0, 0, 0, 0] }));
+export function useTable(mjers: Mjers, settings: Settings, seed?: string) {
+    const [match, setMatch] = useState<MatchState>(() => ({ hand: 0, baseSeed: startingSeed(seed), dealer: null, totals: [0, 0, 0, 0] }));
     const [table, setTable] = useState<TableState>();
     const [advice, setAdvice] = useState<Advice>();
     const [error, setError] = useState<string>();
@@ -188,7 +186,7 @@ export function useTable(mjers: Mjers, settings: Settings) {
                 setAdvice(undefined);
                 setError(undefined);
             } catch (error_) {
-                setError(String(error_));
+                setError(`The engine rejected that move: ${String(error_)}. Pick another action.`);
             }
         },
         [choose, commit, mirror],
@@ -250,7 +248,7 @@ export function useTable(mjers: Mjers, settings: Settings) {
         try {
             setAdvice(live.current?.game.advise(HUMAN, { samples: 0 }));
         } catch (error_) {
-            setError(String(error_));
+            setError(`The engine could not give a hint: ${String(error_)}.`);
         }
     }, []);
 

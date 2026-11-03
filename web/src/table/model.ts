@@ -481,50 +481,219 @@ export function advance(previous: TableModel, observation: Observation, context:
 
     if (drawnIds.length > 0) {
         const pendingBonus = model.pending.filter((step) => step.bonus).length;
+        const known = (seat: Seat) => model.bonus[seat]!.length + (seat === 0 ? pendingBonus : 0);
         const growth = SEATS.map((seat) => {
             const player = observation.players[seat];
-            const known = model.bonus[seat]!.length + (seat === 0 ? pendingBonus : 0);
 
-            return player.concealed_count - heldCount(model, seat) + player.bonus.length - known;
+            return player.concealed_count - heldCount(model, seat) + player.bonus.length - known(seat);
         });
-        const drawer = SEATS.reduce((best, seat) => (growth[seat]! > growth[best]! ? seat : best), observation.to_act[0] ?? SEATS[0]!);
-        const known = model.bonus[drawer]!.length + (drawer === 0 ? pendingBonus : 0);
-        const newBonus = observation.players[drawer].bonus.slice(known);
-        const steps: DrawStep[] = drawnIds.map((entry, index) => ({ ...entry, bonus: index < newBonus.length }));
+        const drawers = SEATS.filter((seat) => growth[seat]! > 0);
 
-        for (const [index, step] of steps.entries()) {
-            if (step.bonus) {
-                model.faces[step.id] = newBonus[index] ?? null;
+        if (drawers.length <= 1) {
+            const drawer = SEATS.reduce((best, seat) => (growth[seat]! > growth[best]! ? seat : best), observation.to_act[0] ?? SEATS[0]!);
+
+            placeDraws(model, observation, drawer, drawnIds, known(drawer));
+        } else {
+            // Several seats drew since the last update (a server update can carry many moves): share the drawn tiles out.
+            const queue = [...drawnIds];
+
+            for (const seat of drawers) {
+                placeDraws(model, observation, seat, queue.splice(0, growth[seat]!), known(seat));
+            }
+
+            if (queue.length > 0) {
+                placeDraws(model, observation, drawers.at(-1)!, queue, known(drawers.at(-1)!));
+            }
+        }
+    }
+
+    return model;
+}
+
+function placeDraws(
+    model: TableModel,
+    observation: Observation,
+    drawer: Seat,
+    drawnIds: { id: number; source: "front" | "back" }[],
+    known: number,
+) {
+    const newBonus = observation.players[drawer].bonus.slice(known);
+    const steps: DrawStep[] = drawnIds.map((entry, index) => ({ ...entry, bonus: index < newBonus.length }));
+
+    for (const [index, step] of steps.entries()) {
+        if (step.bonus) {
+            model.faces[step.id] = newBonus[index] ?? null;
+        }
+    }
+
+    if (drawer === 0) {
+        const faces = unplacedFaces(model, observation.hand);
+        const kept = steps.filter((step) => !step.bonus);
+        const latest = observation.decision.kind === "turn" ? observation.decision.drawn : null;
+
+        if (latest !== null && kept.length > 0) {
+            const index = faces.lastIndexOf(latest);
+
+            if (index !== -1) {
+                faces.splice(index, 1);
+                faces.push(latest);
             }
         }
 
-        if (drawer === 0) {
-            const faces = unplacedFaces(model, observation.hand);
-            const kept = steps.filter((step) => !step.bonus);
-            const latest = observation.decision.kind === "turn" ? observation.decision.drawn : null;
-
-            if (latest !== null && kept.length > 0) {
-                const index = faces.lastIndexOf(latest);
-
-                if (index !== -1) {
-                    faces.splice(index, 1);
-                    faces.push(latest);
-                }
+        for (const [index, step] of kept.entries()) {
+            model.faces[step.id] = faces[faces.length - kept.length + index] ?? null;
+        }
+        model.pending.push(...steps);
+    } else {
+        for (const step of steps) {
+            if (step.bonus) {
+                model.bonus[drawer]!.push(step.id);
+            } else if (model.drawn[drawer] === null) {
+                model.drawn[drawer] = step.id;
+            } else {
+                model.hands[drawer]!.push(step.id);
             }
+        }
+    }
+}
 
-            for (const [index, step] of kept.entries()) {
-                model.faces[step.id] = faces[faces.length - kept.length + index] ?? null;
-            }
-            model.pending.push(...steps);
-        } else {
-            for (const step of steps) {
-                if (step.bonus) {
-                    model.bonus[drawer]!.push(step.id);
-                } else if (model.drawn[drawer] === null) {
-                    model.drawn[drawer] = step.id;
-                } else {
-                    model.hands[drawer]!.push(step.id);
-                }
+/** Whether the table shows what the observation says: hand sizes, melds, flowers and discards. */
+export function matches(model: TableModel, observation: Observation): boolean {
+    const pendingBonus = model.pending.filter((step) => step.bonus).length;
+
+    return (
+        model.discardIds.length === observation.discards.length &&
+        model.pond.length === observation.discards.filter((discard) => !discard.claimed).length &&
+        SEATS.every((seat) => {
+            const player = observation.players[seat];
+
+            return (
+                heldCount(model, seat) === player.concealed_count &&
+                model.melds[seat]!.length === player.melds.length &&
+                model.bonus[seat]!.length + (seat === 0 ? pendingBonus : 0) === player.bonus.length
+            );
+        })
+    );
+}
+
+/**
+ * Lays out a table mid-hand straight from an observation, with no history: used when joining or reconnecting part way through a
+ * hand, or when an update skipped more than the table can follow. Face-down tiles come from the wall in draw order.
+ */
+export function restoreModel(observation: Observation, wall: WallBreak, seed: number): TableModel {
+    const model: TableModel = {
+        dealer: observation.dealer,
+        setter: wall.setter,
+        live: Array.from({ length: TILE_COUNT - wall.counted * 2 }, (_, n) => frontId(wall.breakStack, n)),
+        flowerWall: [],
+        flowerSlots: Array.from({ length: TILE_COUNT }, () => -1),
+        flowerNext: 0,
+        front: frontCount(observation),
+        back: backCount(observation),
+        faces: Array.from({ length: TILE_COUNT }, () => null),
+        hands: [[], [], [], []],
+        drawn: [null, null, null, null],
+        melds: [[], [], [], []],
+        bonus: [[], [], [], []],
+        pond: [],
+        discardIds: [],
+        claimed: [],
+        pending: [],
+        revealed: false,
+        random: Math.trunc(seed),
+    };
+
+    for (let m = 0; m < wall.counted * 2; m++) {
+        toFlowerWall(model, backId(wall.breakStack, m));
+    }
+
+    const pool: number[] = [];
+
+    for (let n = 0; n < model.front; n++) {
+        const id = drawFront(model);
+
+        if (id !== undefined) {
+            pool.push(id);
+        }
+    }
+
+    for (let n = 0; n < model.back; n++) {
+        const id = drawBack(model);
+
+        if (id !== undefined) {
+            pool.push(id);
+        }
+    }
+
+    const next = (face: Tile | null): number | undefined => {
+        const id = pool.shift();
+
+        if (id !== undefined) {
+            model.faces[id] = face;
+        }
+
+        return id;
+    };
+
+    for (const seat of SEATS) {
+        const player = observation.players[seat];
+
+        model.bonus[seat] = player.bonus.map((bonus) => next(bonus)).filter((id): id is number => id !== undefined);
+        model.melds[seat] = player.melds.map((meld) => ({
+            meld,
+            ids: meldTiles(meld)
+                .map((tile) => next(tile))
+                .filter((id): id is number => id !== undefined),
+        }));
+    }
+
+    for (const discard of observation.discards) {
+        model.claimed.push(discard.claimed);
+
+        if (discard.claimed) {
+            model.discardIds.push(-1);
+            continue;
+        }
+
+        const id = next(discard.tile);
+
+        if (id === undefined) {
+            model.discardIds.push(-1);
+            continue;
+        }
+
+        model.discardIds.push(id);
+        model.pond.push(toss(model, id, discard.seat));
+    }
+
+    const mine = expandCounts(observation.hand.concealed);
+    const drawn = observation.decision.kind === "turn" && observation.to_act.includes(0) ? observation.decision.drawn : null;
+    const drawnIndex = drawn === null ? -1 : mine.lastIndexOf(drawn);
+
+    if (drawnIndex !== -1) {
+        mine.splice(drawnIndex, 1);
+    }
+
+    for (const face of mine) {
+        const id = next(face);
+
+        if (id !== undefined) {
+            model.hands[0]!.push(id);
+        }
+    }
+
+    if (drawnIndex !== -1) {
+        model.drawn[0] = next(drawn) ?? null;
+    }
+
+    model.hands[0] = sortedHand(model);
+
+    for (const seat of SEATS.slice(1)) {
+        for (let index = 0; index < observation.players[seat].concealed_count; index++) {
+            const id = next(null);
+
+            if (id !== undefined) {
+                model.hands[seat]!.push(id);
             }
         }
     }
