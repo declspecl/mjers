@@ -1,6 +1,6 @@
 import type { GradeResult } from "./grade";
 import type { GraderMessage, GraderReply } from "./protocol";
-import type { Action, Seat } from "@mjers/mjers/types";
+import type { Action, Observation, Seat } from "@mjers/mjers/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface GradedMove {
@@ -50,15 +50,34 @@ export function useGrader() {
 
     const post = useCallback((message: GraderMessage) => worker.current?.postMessage(message), []);
 
-    const start = useCallback(
-        (seed: bigint, dealer: Seat) => {
-            session.current += 1;
-            requested.current.clear();
-            setGraded([]);
-            setFailure(undefined);
-            post({ type: "start", session: session.current, seed, dealer });
+    const reset = useCallback(() => {
+        session.current += 1;
+        requested.current.clear();
+        setGraded([]);
+        setFailure(undefined);
+    }, []);
+
+    const snapshot = useCallback(
+        (hand: number, decision: number, observation: Observation, chosen: Action) => {
+            post({
+                type: "grade",
+                session: session.current,
+                hand,
+                decision,
+                candidates: observation.legal_actions.length,
+                chosen,
+                observation,
+            });
         },
         [post],
+    );
+
+    const start = useCallback(
+        (seed: bigint, dealer: Seat) => {
+            reset();
+            post({ type: "start", session: session.current, seed, dealer });
+        },
+        [post, reset],
     );
 
     const apply = useCallback((seat: Seat, action: Action) => post({ type: "apply", session: session.current, seat, action }), [post]);
@@ -83,5 +102,5 @@ export function useGrader() {
         [post],
     );
 
-    return { start, apply, request, choose, graded, failure };
+    return { start, reset, snapshot, apply, request, choose, graded, failure };
 }

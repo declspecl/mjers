@@ -6,7 +6,7 @@ allowBuilds:
     workerd: true
 
 catalog:
-    "@mjers/mjers": ^0.1.1
+    "@mjers/mjers": ^0.1.2
     "@eslint/js": ^9.39.1
     "@trivago/prettier-plugin-sort-imports": ^6.0.2
     "@types/node": ^24.13.3

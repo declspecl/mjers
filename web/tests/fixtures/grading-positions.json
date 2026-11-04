@@ -1,0 +1,2377 @@
+{
+    "1000:15": {
+        "seat": 3,
+        "dealer": 0,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "1235689m27999p6s",
+            "melds": [],
+            "bonus": ["1F", "2F", "3F"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["2S"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": []
+            },
+            {
+                "seat": 2,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "pong": "3z"
+                    }
+                ],
+                "bonus": []
+            },
+            {
+                "seat": 3,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["1F", "2F", "3F"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "3z",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "2p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "9p",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "2m259p112233335667z",
+        "wall_remaining": 75,
+        "live_wall": 59,
+        "to_act": [3],
+        "legal_actions": ["pong", "kong", "pass"],
+        "decision": {
+            "kind": "claim",
+            "tile": "9p",
+            "from": 2,
+            "offer": "discard"
+        }
+    },
+    "1003:33": {
+        "seat": 2,
+        "dealer": 3,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "57m127p123666679s",
+            "melds": [],
+            "bonus": []
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["2F", "3F", "3S"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": []
+            },
+            {
+                "seat": 2,
+                "concealed_count": 14,
+                "melds": [],
+                "bonus": []
+            },
+            {
+                "seat": 3,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "chow": "1m"
+                    }
+                ],
+                "bonus": ["2S", "4S"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 3,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "9m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1m",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "8m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "1s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "5m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "8m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "2p",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "1112235889m2p112s111223445566777z",
+        "wall_remaining": 60,
+        "live_wall": 44,
+        "to_act": [2],
+        "legal_actions": [
+            {
+                "concealed_kong": "6s"
+            },
+            {
+                "discard": "5m"
+            },
+            {
+                "discard": "7m"
+            },
+            {
+                "discard": "1p"
+            },
+            {
+                "discard": "2p"
+            },
+            {
+                "discard": "7p"
+            },
+            {
+                "discard": "1s"
+            },
+            {
+                "discard": "2s"
+            },
+            {
+                "discard": "3s"
+            },
+            {
+                "discard": "6s"
+            },
+            {
+                "discard": "7s"
+            },
+            {
+                "discard": "9s"
+            }
+        ],
+        "decision": {
+            "kind": "turn",
+            "after_claim": false,
+            "drawn": "6s"
+        }
+    },
+    "1008:30": {
+        "seat": 0,
+        "dealer": 0,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "44m34p455567899s",
+            "melds": [],
+            "bonus": ["2F", "4S"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["2F", "4S"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "chow": "7m"
+                    }
+                ],
+                "bonus": ["1F"]
+            },
+            {
+                "seat": 2,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["1S", "3S"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 7,
+                "melds": [
+                    {
+                        "chow": "1m"
+                    },
+                    {
+                        "chow": "5m"
+                    }
+                ],
+                "bonus": []
+            }
+        ],
+        "discards": [
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1m",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "5m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "9m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5m",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "1s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "7m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "9m",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5s",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "12335556777899m115s1112223334556677z",
+        "wall_remaining": 63,
+        "live_wall": 47,
+        "to_act": [0],
+        "legal_actions": ["pong", "kong", "pass"],
+        "decision": {
+            "kind": "claim",
+            "tile": "5s",
+            "from": 2,
+            "offer": "discard"
+        }
+    },
+    "1015:47": {
+        "seat": 0,
+        "dealer": 3,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "79m44s3z",
+            "melds": [
+                {
+                    "pong": "3z"
+                },
+                {
+                    "pong": "6z"
+                },
+                {
+                    "pong": "4p"
+                }
+            ],
+            "bonus": ["2F", "4F"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 5,
+                "melds": [
+                    {
+                        "pong": "3z"
+                    },
+                    {
+                        "pong": "6z"
+                    },
+                    {
+                        "pong": "4p"
+                    }
+                ],
+                "bonus": ["2F", "4F"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 7,
+                "melds": [
+                    {
+                        "pong": "9s"
+                    },
+                    {
+                        "chow": "4s"
+                    }
+                ],
+                "bonus": ["1F", "3S"]
+            },
+            {
+                "seat": 2,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["3F"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 4,
+                "melds": [
+                    {
+                        "pong": "1s"
+                    },
+                    {
+                        "pong": "3m"
+                    },
+                    {
+                        "chow": "5s"
+                    }
+                ],
+                "bonus": ["4S"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 3,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "6z",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "1p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "9s",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1s",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "9m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "3m",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "9p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "4p",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "6s",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "8s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5s",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "7s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "3p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "2p",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3p",
+                "claimed": false,
+                "drawn": true
+            }
+        ],
+        "public_tiles": "23339m1223344458889p111245566778999s11222233344555666777z",
+        "wall_remaining": 56,
+        "live_wall": 40,
+        "to_act": [0],
+        "legal_actions": [
+            {
+                "upgrade_kong": "3z"
+            },
+            {
+                "discard": "7m"
+            },
+            {
+                "discard": "9m"
+            },
+            {
+                "discard": "4s"
+            },
+            {
+                "discard": "3z"
+            }
+        ],
+        "decision": {
+            "kind": "turn",
+            "after_claim": false,
+            "drawn": "3z"
+        }
+    },
+    "1016:20": {
+        "seat": 3,
+        "dealer": 0,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "355589m4p123589s",
+            "melds": [],
+            "bonus": ["1S"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["2F"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "chow": "7m"
+                    }
+                ],
+                "bonus": []
+            },
+            {
+                "seat": 2,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["4F", "2S", "3S"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["1S"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "8s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "9m",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "8s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "5s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "5m",
+                "claimed": false,
+                "drawn": true
+            }
+        ],
+        "public_tiles": "12566789m8p588s1233446z",
+        "wall_remaining": 71,
+        "live_wall": 55,
+        "to_act": [3],
+        "legal_actions": ["pong", "kong", "pass"],
+        "decision": {
+            "kind": "claim",
+            "tile": "5m",
+            "from": 0,
+            "offer": "discard"
+        }
+    },
+    "1018:12": {
+        "seat": 2,
+        "dealer": 2,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "189m359p24s44555z",
+            "melds": [],
+            "bonus": ["2F"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["4F", "4S"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["1S"]
+            },
+            {
+                "seat": 2,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["2F"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["2S"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 2,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "11223334457z",
+        "wall_remaining": 76,
+        "live_wall": 60,
+        "to_act": [2],
+        "legal_actions": ["pong", "kong", "pass"],
+        "decision": {
+            "kind": "claim",
+            "tile": "5z",
+            "from": 0,
+            "offer": "discard"
+        }
+    },
+    "1015:21": {
+        "seat": 3,
+        "dealer": 3,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "23355m47p2367s",
+            "melds": [
+                {
+                    "pong": "1s"
+                }
+            ],
+            "bonus": ["4S"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 7,
+                "melds": [
+                    {
+                        "pong": "3z"
+                    },
+                    {
+                        "pong": "6z"
+                    }
+                ],
+                "bonus": ["2F", "4F"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "pong": "9s"
+                    }
+                ],
+                "bonus": ["1F", "3S"]
+            },
+            {
+                "seat": 2,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": []
+            },
+            {
+                "seat": 3,
+                "concealed_count": 11,
+                "melds": [
+                    {
+                        "pong": "1s"
+                    }
+                ],
+                "bonus": ["4S"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 3,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "6z",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "1p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "9s",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1s",
+                "claimed": true,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "18p111999s1122333445566677z",
+        "wall_remaining": 74,
+        "live_wall": 58,
+        "to_act": [3],
+        "legal_actions": [
+            {
+                "discard": "2m"
+            },
+            {
+                "discard": "3m"
+            },
+            {
+                "discard": "5m"
+            },
+            {
+                "discard": "4p"
+            },
+            {
+                "discard": "7p"
+            },
+            {
+                "discard": "2s"
+            },
+            {
+                "discard": "3s"
+            },
+            {
+                "discard": "6s"
+            },
+            {
+                "discard": "7s"
+            }
+        ],
+        "decision": {
+            "kind": "turn",
+            "after_claim": true,
+            "drawn": null
+        }
+    },
+    "1016:54": {
+        "seat": 0,
+        "dealer": 0,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "123355667p345s77z",
+            "melds": [],
+            "bonus": ["2F"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 14,
+                "melds": [],
+                "bonus": ["2F"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "chow": "7m"
+                    }
+                ],
+                "bonus": []
+            },
+            {
+                "seat": 2,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "pong": "5z"
+                    }
+                ],
+                "bonus": ["4F", "2S", "3S"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "kong": ["5m", "exposed"]
+                    }
+                ],
+                "bonus": ["1S"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "8s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "9m",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "8s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "5s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "5m",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "7m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "1p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "5z",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "1p",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "8m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "3s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "4s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "4m",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "1112233345555666677889m118p22234588s122223334445556667z",
+        "wall_remaining": 44,
+        "live_wall": 28,
+        "to_act": [0],
+        "legal_actions": [
+            {
+                "discard": "1p"
+            },
+            {
+                "discard": "2p"
+            },
+            {
+                "discard": "3p"
+            },
+            {
+                "discard": "5p"
+            },
+            {
+                "discard": "6p"
+            },
+            {
+                "discard": "7p"
+            },
+            {
+                "discard": "3s"
+            },
+            {
+                "discard": "4s"
+            },
+            {
+                "discard": "5s"
+            },
+            {
+                "discard": "7z"
+            }
+        ],
+        "decision": {
+            "kind": "turn",
+            "after_claim": false,
+            "drawn": "3p"
+        }
+    },
+    "1017:22": {
+        "seat": 0,
+        "dealer": 1,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "1479m677p2556789s",
+            "melds": [],
+            "bonus": []
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 14,
+                "melds": [],
+                "bonus": []
+            },
+            {
+                "seat": 1,
+                "concealed_count": 13,
+                "melds": [],
+                "bonus": ["3S", "4S"]
+            },
+            {
+                "seat": 2,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "pong": "9p"
+                    }
+                ],
+                "bonus": ["2F", "4F", "2S"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 7,
+                "melds": [
+                    {
+                        "chow": "7m"
+                    },
+                    {
+                        "chow": "2m"
+                    }
+                ],
+                "bonus": []
+            }
+        ],
+        "discards": [
+            {
+                "seat": 1,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "3z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "1s",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "7z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "9p",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "9m",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "9s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2m",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "8s",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "23346789m999p189s11133356667z",
+        "wall_remaining": 70,
+        "live_wall": 54,
+        "to_act": [0],
+        "legal_actions": [
+            {
+                "discard": "1m"
+            },
+            {
+                "discard": "4m"
+            },
+            {
+                "discard": "7m"
+            },
+            {
+                "discard": "9m"
+            },
+            {
+                "discard": "6p"
+            },
+            {
+                "discard": "7p"
+            },
+            {
+                "discard": "2s"
+            },
+            {
+                "discard": "5s"
+            },
+            {
+                "discard": "6s"
+            },
+            {
+                "discard": "7s"
+            },
+            {
+                "discard": "8s"
+            },
+            {
+                "discard": "9s"
+            }
+        ],
+        "decision": {
+            "kind": "turn",
+            "after_claim": false,
+            "drawn": "7s"
+        }
+    },
+    "1024:40": {
+        "seat": 1,
+        "dealer": 0,
+        "rules": {
+            "name": "family",
+            "flower_wall_stacks": 8,
+            "allow_rob_kong": false,
+            "payouts": {
+                "discard_win": 1,
+                "discard_win_discarder": 2,
+                "self_draw_win": 3,
+                "per_bonus": 1,
+                "exposed_kong": 1,
+                "concealed_kong": 2,
+                "kongs_paid_without_winner": true
+            }
+        },
+        "hand": {
+            "concealed": "13456m4446p33567s",
+            "melds": [],
+            "bonus": ["1F"]
+        },
+        "players": [
+            {
+                "seat": 0,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "pong": "3z"
+                    }
+                ],
+                "bonus": ["4F", "2S"]
+            },
+            {
+                "seat": 1,
+                "concealed_count": 14,
+                "melds": [],
+                "bonus": ["1F"]
+            },
+            {
+                "seat": 2,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "pong": "7z"
+                    }
+                ],
+                "bonus": ["1S", "3S"]
+            },
+            {
+                "seat": 3,
+                "concealed_count": 10,
+                "melds": [
+                    {
+                        "chow": "1m"
+                    }
+                ],
+                "bonus": ["2F"]
+            }
+        ],
+        "discards": [
+            {
+                "seat": 0,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "9m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "2m",
+                "claimed": true,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "6z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "1p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "9m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "2s",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "1s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "3z",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "4m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "1m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "5p",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "8p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 1,
+                "tile": "7s",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 2,
+                "tile": "4z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "9m",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "4m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 1,
+                "tile": "1z",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "3m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 3,
+                "tile": "1p",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 0,
+                "tile": "7z",
+                "claimed": true,
+                "drawn": true
+            },
+            {
+                "seat": 2,
+                "tile": "5z",
+                "claimed": false,
+                "drawn": false
+            },
+            {
+                "seat": 3,
+                "tile": "2m",
+                "claimed": false,
+                "drawn": true
+            },
+            {
+                "seat": 0,
+                "tile": "6m",
+                "claimed": false,
+                "drawn": false
+            }
+        ],
+        "public_tiles": "1122333446999m11588p1227s1112233344456777z",
+        "wall_remaining": 56,
+        "live_wall": 40,
+        "to_act": [1],
+        "legal_actions": [
+            {
+                "discard": "1m"
+            },
+            {
+                "discard": "3m"
+            },
+            {
+                "discard": "4m"
+            },
+            {
+                "discard": "5m"
+            },
+            {
+                "discard": "6m"
+            },
+            {
+                "discard": "4p"
+            },
+            {
+                "discard": "6p"
+            },
+            {
+                "discard": "3s"
+            },
+            {
+                "discard": "5s"
+            },
+            {
+                "discard": "6s"
+            },
+            {
+                "discard": "7s"
+            }
+        ],
+        "decision": {
+            "kind": "turn",
+            "after_claim": false,
+            "drawn": "4p"
+        }
+    }
+}

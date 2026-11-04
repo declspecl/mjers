@@ -1,7 +1,7 @@
 import type { GradedMove } from "../grading/use-grader";
 import { useEffect, useState } from "react";
 
-const SHOWN_MS = 2600;
+const SHOWN_MS = 4200;
 
 /** A brief word on your last move, shown once the engine has judged it. */
 export function GradeToast({ latest }: { latest: GradedMove | undefined }) {
@@ -9,6 +9,8 @@ export function GradeToast({ latest }: { latest: GradedMove | undefined }) {
 
     useEffect(() => {
         if (!latest) {
+            setVisible(undefined);
+
             return;
         }
 
@@ -30,7 +32,11 @@ export function GradeToast({ latest }: { latest: GradedMove | undefined }) {
             data-grade={visible.result.grade.toLowerCase()}
             key={`${visible.hand}-${visible.decision}`}
         >
-            {visible.result.grade}
+            <strong>
+                {visible.result.grade}
+                {visible.result.basis ? `: ${visible.result.basis.toLowerCase()}` : ""}
+            </strong>
+            {visible.result.summary && <span className="grade-explanation">{visible.result.summary}</span>}
         </p>
     );
 }

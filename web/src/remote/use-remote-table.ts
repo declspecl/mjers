@@ -2,6 +2,7 @@ import type { LogEvent } from "../engine/event-log";
 import { setSeatNames } from "../engine/names";
 import { prefersReducedMotion, type Settings } from "../engine/settings";
 import type { TableState } from "../engine/use-table";
+import { useGrader } from "../grading/use-grader";
 import { layout } from "../table/layout";
 import {
     advance,
@@ -19,6 +20,7 @@ import { randomInt } from "../table/random";
 import { setupFrames } from "../table/setup";
 import { socketUrl } from "./config";
 import { describeEvent } from "./events";
+import { confirmsMove, type PendingGrade } from "./grading";
 import type { SavedSeat } from "./identity";
 import type { ClientMessage, ConnectionStatus, PublicEvent, RoomInfo, ServerMessage, StateMessage } from "./protocol";
 import { rotateEvent, rotateHands, rotateObservation, rotateResult, rotateSeats } from "./rotate";
@@ -41,6 +43,7 @@ interface Tracker {
     /** The tile you picked, so that same tile leaves your hand when the server confirms the discard. */
     discardId?: number;
     awaiting: boolean;
+    pendingGrade?: PendingGrade;
     autoplay: boolean;
 }
 
@@ -131,6 +134,7 @@ function errorText(code: string, message: string): string {
 
 /** Plays a hand held by the multiplayer server. The server owns the game; this only shows its observations for your seat. */
 export function useRemoteTable(seat: SavedSeat, settings: Settings) {
+    const { reset: resetGrader, snapshot: gradeSnapshot, graded, failure: gradingFailure } = useGrader();
     const [status, setStatus] = useState<ConnectionStatus>("connecting");
     const [room, setRoom] = useState<RoomInfo>();
     const [table, setTable] = useState<TableState>();
@@ -177,6 +181,8 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
             setSeatNames(rotateSeats(message.seats, me).map((view, index) => (index === 0 ? "You" : (view.name ?? "Open seat"))));
 
             if (message.observation === null) {
+                state.pendingGrade = undefined;
+                resetGrader();
                 commit(undefined);
 
                 return;
@@ -186,6 +192,8 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
             let next: TableState;
 
             if (!previous || previous.hand !== message.hand_number - 1) {
+                state.pendingGrade = undefined;
+                resetGrader();
                 state.log = [];
                 state.logged = new Set();
                 state.discardId = undefined;
@@ -213,6 +221,13 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
                 next = { ...previous, model, observation, moves: message.steps };
             }
 
+            const pending = state.pendingGrade;
+
+            if (pending && confirmsMove(pending, next.hand, next.moves, next.observation)) {
+                state.pendingGrade = undefined;
+                gradeSnapshot(pending.hand, pending.decision, pending.observation, pending.chosen);
+            }
+
             if (state.autoplay && next.model.pending.length > 0) {
                 next = { ...next, model: flushDraws(next.model) };
             }
@@ -220,7 +235,7 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
             state.awaiting = false;
             commit({ ...next, humanToAct: humanToAct(next) });
         },
-        [commit, humanToAct],
+        [commit, humanToAct, gradeSnapshot, resetGrader],
     );
 
     const onEvents = useCallback(
@@ -306,6 +321,7 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
                     break;
                 }
                 case "error": {
+                    state.pendingGrade = undefined;
                     state.awaiting = false;
                     setError(errorText(message.code, message.message));
 
@@ -330,11 +346,12 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
 
     useEffect(() => {
         tracker.current = { version: -1, me: seat.seat, log: [], logged: new Set(), awaiting: false, autoplay: false };
+        resetGrader();
         commit(undefined);
         setRoom(undefined);
 
         return () => setSeatNames(null);
-    }, [seat.table, seat.seat, commit]);
+    }, [seat.table, seat.seat, commit, resetGrader]);
 
     useEffect(() => {
         let disposed = false;
@@ -383,6 +400,7 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
                     return;
                 }
 
+                tracker.current.pendingGrade = undefined;
                 tracker.current.awaiting = false;
 
                 if (!opened && failures >= 2) {
@@ -466,6 +484,10 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
                 return;
             }
 
+            state.pendingGrade =
+                settingsRef.current.feedback && current.observation.legal_actions.length > 1
+                    ? { hand: current.hand, decision: current.moves, observation: current.observation, chosen: action }
+                    : undefined;
             state.awaiting = true;
             state.discardId = discardId;
             setError(undefined);
@@ -505,6 +527,8 @@ export function useRemoteTable(seat: SavedSeat, settings: Settings) {
         room,
         table,
         advice,
+        graded,
+        gradingFailure,
         error,
         act,
         draw: useCallback(() => update(takeDraw), [update]),

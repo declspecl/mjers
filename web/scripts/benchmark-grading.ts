@@ -4,7 +4,7 @@
  */
 import createMjers from "../../npm/index.js";
 import { analyzeMove } from "../src/grading/analyze";
-import { grade } from "../src/grading/grade";
+import { gradeByPlayouts as grade } from "../src/grading/playout-grade";
 
 const mjers = await createMjers();
 const cases = [];

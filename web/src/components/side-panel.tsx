@@ -125,7 +125,8 @@ export function SidePanel({ table, advice, error, graded, feedback, gradingFailu
                     {latest ? (
                         <>
                             <p>
-                                <strong data-grade={latest.result.grade.toLowerCase()}>{latest.result.grade}</strong> for{" "}
+                                <strong data-grade={latest.result.grade.toLowerCase()}>{latest.result.grade}</strong>
+                                {latest.result.basis ? ` (${latest.result.basis.toLowerCase()})` : ""} for{" "}
                                 {lowerFirst(actionLabel(latest.action, undefined))}.
                                 {!sameAction(latest.action, latest.result.best) && (
                                     <> The engine suggested {lowerFirst(actionLabel(latest.result.best, undefined))}.</>
@@ -137,7 +138,7 @@ export function SidePanel({ table, advice, error, graded, feedback, gradingFailu
                             </p>
                         </>
                     ) : (
-                        <p className="muted">Each move you make is graded against the engine once its playouts finish.</p>
+                        <p className="muted">Feedback explains your hand progress, kong payments, and safety tradeoffs after each move.</p>
                     )}
                     {gradingFailure !== undefined && (
                         <p className="problem">Grading stopped: {gradingFailure}. Reload the page to restart it.</p>

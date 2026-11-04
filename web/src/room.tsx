@@ -223,9 +223,9 @@ function RoomSession({ seat, onLeave }: { seat: SavedSeat; onLeave: (forget: boo
             table={table}
             advice={remote.advice}
             error={remote.error}
-            graded={[]}
-            gradingFailure={undefined}
-            grading={false}
+            graded={remote.graded}
+            gradingFailure={remote.gradingFailure}
+            grading
             totals={rotateSeats(room.scores, seat.seat)}
             act={remote.act}
             draw={remote.draw}

@@ -421,6 +421,7 @@ main > .problem {
     color: var(--grade-good);
 }
 
+[data-grade="tradeoff"],
 [data-grade="okay"] {
     color: var(--grade-okay);
 }
@@ -694,4 +695,17 @@ button.icon svg {
 
 [data-grade="unclear"] {
     color: var(--grade-okay);
+}
+
+.grade-toast {
+    max-width: min(32ch, calc(100vw - 24px));
+    width: max-content;
+}
+
+.grade-explanation {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.8em;
+    font-weight: 400;
+    line-height: 1.35;
 }

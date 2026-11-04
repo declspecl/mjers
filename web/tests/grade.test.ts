@@ -1,4 +1,4 @@
-import { grade } from "../src/grading/grade";
+import { gradeByPlayouts as grade } from "../src/grading/playout-grade";
 import type { Action, Advice, Assessment, Estimate } from "@mjers/mjers/types";
 import assert from "node:assert/strict";
 import test from "node:test";

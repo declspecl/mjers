@@ -10,7 +10,7 @@ const scope = self as DedicatedWorkerGlobalScope;
 let game: InstanceType<Engine["Game"]> | undefined;
 let queue: Promise<void> = Promise.resolve();
 
-/** Mirrors the hand by replaying every move, then runs playouts for your decisions without blocking the table. */
+/** Mirrors the hand by replaying every move, then assesses your decisions without blocking the table. */
 async function handle(message: GraderMessage) {
     const mjers = await createMjers();
 
@@ -21,22 +21,26 @@ async function handle(message: GraderMessage) {
         return;
     }
 
-    if (!game) {
-        return;
-    }
-
     if (message.type === "apply") {
-        game.apply(message.seat, message.action);
+        game?.apply(message.seat, message.action);
 
         return;
     }
 
     const request: GradeRequest = message;
 
+    let sampled: InstanceType<Engine["Game"]> | undefined;
+
     try {
-        const current = game;
+        sampled = request.observation ? mjers.Game.fromObservation(request.observation, BigInt(request.decision)) : undefined;
+        const current = sampled ?? game;
+
+        if (!current) {
+            return;
+        }
         const result = analyzeMove(
-            (samples) => current.advise(0, { samples, candidates: request.candidates, seed: BigInt(request.decision) }),
+            (samples) =>
+                current.advise(request.observation?.seat ?? 0, { samples, candidates: request.candidates, seed: BigInt(request.decision) }),
             request.chosen,
         );
 
@@ -56,6 +60,8 @@ async function handle(message: GraderMessage) {
             hand: request.hand,
             error: String(error),
         });
+    } finally {
+        sampled?.free();
     }
 }
 

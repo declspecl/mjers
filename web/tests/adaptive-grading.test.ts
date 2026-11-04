@@ -1,5 +1,5 @@
-import { analyzeMove, SAMPLE_BUDGETS } from "../src/grading/analyze";
-import { grade } from "../src/grading/grade";
+import { analyzeMove } from "../src/grading/analyze";
+import { gradeByPlayouts as grade } from "../src/grading/playout-grade";
 import type { Action, Advice, Estimate } from "@mjers/mjers/types";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -40,48 +40,17 @@ test("direct pairing resolves noise that baseline-relative errors cannot", () =>
     assert.equal(grade(position, chosen).grade, "Terrible");
 });
 
-test("adaptive analysis stops early on clear decisions", () => {
+test("live feedback requests one instant assessment and no playouts", () => {
     const calls: number[] = [];
     const result = analyzeMove((samples) => {
         calls.push(samples);
 
-        return advice(2, 0.01, samples);
+        return advice(2, 1, samples);
     }, chosen);
-    assert.deepEqual(calls, [SAMPLE_BUDGETS[0]]);
-    assert.equal(result.grade, "Terrible");
-});
-
-test("adaptive analysis deepens an ambiguous decision", () => {
-    const calls: number[] = [];
-    const result = analyzeMove((samples) => {
-        calls.push(samples);
-
-        return advice(2, samples === SAMPLE_BUDGETS[0] ? 1 : 0.01, samples);
-    }, chosen);
-    assert.deepEqual(calls, [...SAMPLE_BUDGETS]);
-    assert.equal(result.grade, "Terrible");
-});
-
-test("persistent uncertainty stops at the budget instead of manufacturing praise", () => {
-    const calls: number[] = [];
-    const result = analyzeMove((samples) => {
-        calls.push(samples);
-
-        return advice(0.2, 1, samples);
-    }, chosen);
-    assert.deepEqual(calls, [...SAMPLE_BUDGETS]);
-    assert.equal(result.grade, "Unclear");
-});
-
-test("severity-only uncertainty also receives deeper analysis", () => {
-    const calls: number[] = [];
-    const result = analyzeMove((samples) => {
-        calls.push(samples);
-
-        return advice(1.5, 0.2, samples);
-    }, chosen);
-    assert.deepEqual(calls, [...SAMPLE_BUDGETS]);
-    assert.equal(result.grade, "Mistake");
+    assert.deepEqual(calls, [0]);
+    assert.notEqual(result.grade, "Unclear");
+    assert.equal(result.basis, "Hand progress");
+    assert.ok(result.summary);
 });
 
 test("invalid paired errors fall back to conservative baseline comparisons", () => {

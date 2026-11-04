@@ -171,8 +171,8 @@ catalogs:
       specifier: ^7.0.1
       version: 7.0.1
     '@mjers/mjers':
-      specifier: ^0.1.1
-      version: 0.1.1
+      specifier: ^0.1.2
+      version: 0.1.2
     '@tanstack/react-router':
       specifier: ^1.170.46
       version: 1.170.46
@@ -252,7 +252,7 @@ importers:
         version: 7.0.1(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))(zod@4.6.7)
       '@mjers/mjers':
         specifier: 'catalog:'
-        version: 0.1.1
+        version: 0.1.2
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -892,8 +892,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@mjers/mjers@0.1.1':
-    resolution: {integrity: sha512-CDn7wSE+OS/3LiBtW/EL0bveghfvgOEB5UVEXRwnuTqfPZJ/XILc/KC4Gge8NX2dbKr6B+he3J754voUPyLGPw==}
+  '@mjers/mjers@0.1.2':
+    resolution: {integrity: sha512-Aoevc+NmX9vjatd5x/h2tcH4c0PfUCOPjVNn3qTX7+R42rid3Oatm7AOg6xRMAyyKkxOJkEvLuowXXkwHxInfg==}
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -2774,7 +2774,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@mjers/mjers@0.1.1': {}
+  '@mjers/mjers@0.1.2': {}
 
   '@napi-rs/wasm-runtime@1.2.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:

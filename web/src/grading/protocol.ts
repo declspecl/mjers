@@ -1,5 +1,5 @@
 import type { GradeResult } from "./grade";
-import type { Action, Seat } from "@mjers/mjers/types";
+import type { Action, Observation, Seat } from "@mjers/mjers/types";
 
 export interface GradeRequest {
     type: "grade";
@@ -9,6 +9,7 @@ export interface GradeRequest {
     decision: number;
     candidates: number;
     chosen: Action;
+    observation?: Observation;
 }
 
 export type GraderMessage =
