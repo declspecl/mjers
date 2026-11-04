@@ -1,3 +1,4 @@
+import { actionLabel } from "../engine/action-label";
 import type { GradedMove } from "../grading/use-grader";
 import { useEffect, useState } from "react";
 
@@ -32,11 +33,8 @@ export function GradeToast({ latest }: { latest: GradedMove | undefined }) {
             data-grade={visible.result.grade.toLowerCase()}
             key={`${visible.hand}-${visible.decision}`}
         >
-            <strong>
-                {visible.result.grade}
-                {visible.result.basis ? `: ${visible.result.basis.toLowerCase()}` : ""}
-            </strong>
-            {visible.result.summary && <span className="grade-explanation">{visible.result.summary}</span>}
+            <strong>{visible.result.grade}</strong>
+            {visible.result.grade !== "Perfect" && <span className="grade-explanation">Best: {actionLabel(visible.result.best)}</span>}
         </p>
     );
 }

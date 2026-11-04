@@ -1,55 +1,9 @@
+import { actionLabel } from "../engine/action-label";
 import { seatName, tileName } from "../engine/names";
 import type { TableState } from "../engine/use-table";
-import { GRADES, sameAction } from "../grading/grade";
+import { GRADES, evaluateMoves } from "../grading/grade";
 import type { GradedMove } from "../grading/use-grader";
-import type { Action, Advice, Seat } from "@mjers/mjers/types";
-
-function actionLabel(action: Action, offered: string | undefined): string {
-    if (typeof action === "string") {
-        return { self_draw_win: "Win by self-draw", pass: "Pass", pong: "Pong", kong: "Gong", win: `Win with ${offered ?? "the discard"}` }[
-            action
-        ];
-    }
-
-    if ("discard" in action) {
-        return `Discard ${tileName(action.discard)}`;
-    }
-
-    if ("chow" in action) {
-        return `Seung from ${tileName(action.chow)}`;
-    }
-
-    if ("concealed_kong" in action) {
-        return `Am gong of ${tileName(action.concealed_kong)}`;
-    }
-
-    return `Gong with ${tileName(action.upgrade_kong)}`;
-}
-
-function lowerFirst(text: string): string {
-    return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
-const SEATS: Seat[] = [0, 1, 2, 3];
-
-/** Rewrites the advisor's shorthand (shanten counts, tile lists, seat numbers) as plain sentences. */
-function plainReason(reason: string): string {
-    const ready = /^(\d+)-shanten, (\d+) live improving tiles/.exec(reason);
-
-    if (ready?.[1] !== undefined && ready[2] !== undefined) {
-        const steps = Number(ready[1]);
-        const readiness =
-            steps === 0 ? "One tile from winning" : steps < 0 ? "Complete hand" : `${steps} ${steps === 1 ? "step" : "steps"} from ready`;
-
-        return `${readiness}. ${ready[2]} unseen tiles would improve it.`;
-    }
-
-    return reason.replace(/^danger ([\d.]+)/, "Deal-in risk $1").replaceAll(/seat (\d)/g, (match, digit: string) => {
-        const seat = SEATS.find((candidate) => String(candidate) === digit);
-
-        return seat === undefined ? match : seatName(seat);
-    });
-}
+import type { Advice, Seat } from "@mjers/mjers/types";
 
 function statusText(table: TableState): string {
     const { observation, humanToAct, phase, model } = table;
@@ -96,7 +50,6 @@ interface SidePanelProps {
 /** The analytic view: whose move it is, the wall, the engine's verdicts and hints, and what has happened this hand. */
 export function SidePanel({ table, advice, error, graded, feedback, gradingFailure, totals, onHint }: SidePanelProps) {
     const { observation, events, humanToAct, phase, model } = table;
-    const best = advice?.ranked[0];
     const offered = observation.decision.kind === "claim" ? tileName(observation.decision.tile) : undefined;
     const latest = graded.at(-1);
     const tally = GRADES.map((grade) => ({ grade, count: graded.filter((entry) => entry.result.grade === grade).length })).filter(
@@ -126,19 +79,14 @@ export function SidePanel({ table, advice, error, graded, feedback, gradingFailu
                         <>
                             <p>
                                 <strong data-grade={latest.result.grade.toLowerCase()}>{latest.result.grade}</strong>
-                                {latest.result.basis ? ` (${latest.result.basis.toLowerCase()})` : ""} for{" "}
-                                {lowerFirst(actionLabel(latest.action, undefined))}.
-                                {!sameAction(latest.action, latest.result.best) && (
-                                    <> The engine suggested {lowerFirst(actionLabel(latest.result.best, undefined))}.</>
-                                )}
                             </p>
-                            <p className="muted">{latest.result.reason}</p>
+                            {latest.result.grade !== "Perfect" && <p>Best: {actionLabel(latest.result.best)}</p>}
                             <p className="muted">
                                 {tally.map((entry) => `${entry.count} ${entry.grade.toLowerCase()}`).join(", ")} this hand.
                             </p>
                         </>
                     ) : (
-                        <p className="muted">Feedback explains your hand progress, kong payments, and safety tradeoffs after each move.</p>
+                        <p className="muted">Your grade and the engine’s best move appear after each decision.</p>
                     )}
                     {gradingFailure !== undefined && (
                         <p className="problem">Grading stopped: {gradingFailure}. Reload the page to restart it.</p>
@@ -156,13 +104,13 @@ export function SidePanel({ table, advice, error, graded, feedback, gradingFailu
                 <div className="advice">
                     <h2>Suggested move</h2>
                     <p className="suggestion">{actionLabel(advice.recommended, offered)}</p>
-                    {best !== undefined && (
-                        <ul>
-                            {best.reasons.map((reason) => (
-                                <li key={reason}>{plainReason(reason)}</li>
-                            ))}
-                        </ul>
-                    )}
+                    <ol className="move-rankings" aria-label="Engine move rankings">
+                        {evaluateMoves(advice).map((entry) => (
+                            <li key={JSON.stringify(entry.action)}>
+                                {actionLabel(entry.action, offered)} <strong data-grade={entry.grade.toLowerCase()}>{entry.grade}</strong>
+                            </li>
+                        ))}
+                    </ol>
                 </div>
             )}
 

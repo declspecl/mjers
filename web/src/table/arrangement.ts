@@ -13,8 +13,6 @@ import { TILE_HEIGHT, TILE_WIDTH } from "./geometry";
 const PAD = 10;
 /** The widest a tile in your hand gets, in CSS pixels. */
 const MAX_HAND_TILE = 64;
-/** Below this width a single row of tiles is too small to tap, so a tall screen splits the hand in two. */
-const MIN_HAND_TILE = 34;
 /** Room the hand needs in tile widths: thirteen tiles, the one just drawn, and the gap before it. */
 const ROW_TILES = 14.6;
 const TWO_ROW_TILES = 7.6;
@@ -122,7 +120,10 @@ function finish(
 
 /** Table above, your hand along the whole bottom edge, melds in the left margin and buttons in the right one when it is wide enough. */
 function wide(width: number, height: number): Arrangement {
-    const tile = Math.min(MAX_HAND_TILE, (width - 2 * PAD) / (ROW_TILES * PITCH), (height * WIDE_HAND_SHARE * TILE_WIDTH) / TILE_HEIGHT);
+    // The hand never takes height the table had under the old fixed 1000 by 1160 stage, so no screen sees a smaller table than before.
+    const keep = Math.min((width - 16) / 1000, (height - 16) / 1160) * 1000;
+    const handHeight = Math.max(24, Math.min(height * WIDE_HAND_SHARE, height - PAD * 2.5 - keep));
+    const tile = Math.min(MAX_HAND_TILE, (width - 2 * PAD) / (ROW_TILES * PITCH), (handHeight * TILE_WIDTH) / TILE_HEIGHT);
     const handBand = tileHeight(tile) + PAD * 1.5;
     const fit = (top: number) => Math.max(120, Math.min(height - handBand - top, width - 2 * MIN_MARGIN));
     // Margins too narrow for the corner controls push the table down below them instead.
@@ -153,22 +154,52 @@ function wide(width: number, height: number): Arrangement {
     );
 }
 
-/** Corner controls on top, then the table, then from the bottom up: your hand, your melds and the move buttons. */
+/** Your melds are drawn at this share of a hand tile's size. */
+const MELD_SHARE = 0.72;
+const ROW_GAP = 0.14;
+
+/** Everything under the table on a tall screen: buttons, your melds and your hand, with the space between them. */
+function stackHeight(tile: number, rows: 1 | 2): number {
+    const height = tileHeight(tile);
+
+    return PAD * 2.6 + BUTTON_BAND + height * (rows + (rows - 1) * ROW_GAP + LIFT) + tileHeight(Math.min(tile * MELD_SHARE, 40));
+}
+
+/**
+ * Corner controls on top, then the table across the full width, then from the bottom up: your hand, your melds and the move buttons.
+ *
+ * Width is what limits the table on a tall screen, so it always gets all of it; your hand takes the height that is left. With room to
+ * spare the hand splits into two rows of bigger tiles; on a short screen, such as a phone with its browser bars showing, it keeps one.
+ */
 function tall(width: number, height: number): Arrangement {
     const room = width - 2 * PAD;
-    const rows: 1 | 2 = room / (ROW_TILES * PITCH) >= MIN_HAND_TILE ? 1 : 2;
-    const tile = Math.min(MAX_HAND_TILE, room / ((rows === 1 ? ROW_TILES : TWO_ROW_TILES) * PITCH));
-    const rowGap = tileHeight(tile) * 0.14;
-    const handHeight = rows * tileHeight(tile) + (rows - 1) * rowGap;
-    const meldTile = Math.min(tile * 0.72, 40);
+    const widthCap = (rows: 1 | 2) => Math.min(MAX_HAND_TILE, room / ((rows === 1 ? ROW_TILES : TWO_ROW_TILES) * PITCH));
+    // The largest tile whose stack fits in this much height, treating melds as a fixed share of the hand.
+    const heightCap = (space: number, rows: 1 | 2) =>
+        ((space - PAD * 2.6 - BUTTON_BAND) / (rows + (rows - 1) * ROW_GAP + LIFT + MELD_SHARE)) * (TILE_WIDTH / TILE_HEIGHT);
+    const top = TOP_BAR;
+    const space = height - top - width;
+    const [best, other] = ([2, 1] as const)
+        .map((rows) => ({ rows, tile: Math.min(widthCap(rows), heightCap(space, rows)) }))
+        .toSorted((a, b) => b.tile - a.tile);
+    // A single row needs no more height than two, so prefer it when its tiles are as big.
+    let { rows, tile } = other!.rows === 1 && other!.tile >= best!.tile - 0.5 ? other! : best!;
+    let size = width;
+
+    // Too short even for one row at full width: the table gives up just enough height for it.
+    if (tile < widthCap(1)) {
+        rows = 1;
+        tile = widthCap(1);
+        size = Math.max(120, height - top - stackHeight(tile, 1));
+    }
+
+    const meldTile = Math.min(tile * MELD_SHARE, 40);
+    const handHeight = tileHeight(tile) * (rows + (rows - 1) * ROW_GAP);
     const handBottom = height - PAD;
     const meldBottom = handBottom - handHeight - tileHeight(tile) * LIFT - PAD * 0.6;
     const actionBottom = meldBottom - tileHeight(meldTile) - PAD;
     const above = actionBottom - BUTTON_BAND;
-    // The corner controls get a bar of their own unless that would cost the table more than a sliver.
-    const top = above - PAD - TOP_BAR >= room * 0.88 ? TOP_BAR : PAD;
-    const size = Math.max(120, Math.min(room, above - top - PAD));
-    const table = { x: (width - size) / 2, y: top + (above - top - size) / 2, size };
+    const table = { x: (width - size) / 2, y: top + Math.max(0, (above - top - size) / 2), size };
 
     return finish(
         "tall",

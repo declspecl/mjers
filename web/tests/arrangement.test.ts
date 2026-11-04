@@ -8,6 +8,7 @@ const SCREENS = {
     "small phone portrait": [375, 667],
     "phone portrait": [390, 844],
     "large phone portrait": [430, 932],
+    "phone portrait in a browser": [390, 664],
     "phone landscape": [844, 390],
     "large phone landscape": [932, 430],
     "tablet portrait": [820, 1180],
@@ -72,9 +73,40 @@ for (const [name, [width, height]] of Object.entries(SCREENS)) {
 
         const handTile = screenRect(arrangement, poses.get(0)!);
 
-        assert.ok(handTile.right - handTile.left >= 34, `hand tiles are ${(handTile.right - handTile.left).toFixed(1)}px wide`);
+        assert.ok(handTile.right - handTile.left >= 30, `hand tiles are ${(handTile.right - handTile.left).toFixed(1)}px wide`);
     });
 }
+
+test("the table is never smaller than the old fixed layout made it, and fills the width of a portrait phone", () => {
+    // The laptop with the analysis panel gives a little of its table to a bar for the corner controls, so they stay off the felt.
+    const screens: (readonly [number, number])[] = [
+        ...Object.entries(SCREENS)
+            .filter(([name]) => name !== "laptop with analysis")
+            .map(([, size]) => size),
+        [375, 553],
+        [430, 740],
+        [360, 640],
+    ];
+
+    for (const [width, height] of screens) {
+        const { table } = arrange(width, height);
+        // The old stage was a 1000 by 1160 canvas, table and rack together, inside 8px of padding.
+        const old = Math.min((width - 16) / 1000, (height - 16) / 1160) * 1000;
+
+        assert.ok(table.size >= old - 0.5, `${width}x${height}: table ${table.size.toFixed(0)}px, was ${old.toFixed(0)}px`);
+    }
+
+    const portraitPhones: (readonly [number, number])[] = [
+        [375, 667],
+        [390, 664],
+        [390, 844],
+        [430, 932],
+    ];
+
+    for (const [width, height] of portraitPhones) {
+        assert.equal(arrange(width, height).table.size, width, `${width}x${height}`);
+    }
+});
 
 test("a narrow tall screen splits the hand over two rows, with the drawn tile ending the lower one", () => {
     const arrangement = arrange(390, 844);

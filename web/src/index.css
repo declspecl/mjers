@@ -413,6 +413,7 @@ main > .problem {
     animation: verdict 220ms ease-out;
 }
 
+[data-grade="perfect"],
 [data-grade="excellent"] {
     color: var(--grade-perfect);
 }

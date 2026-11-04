@@ -1,4 +1,4 @@
-import { grade } from "../src/grading/grade";
+import { assessMove as grade } from "../src/grading/assess-move";
 import fixtures from "./fixtures/grading-positions.json";
 import createMjers from "@mjers/mjers";
 import type { Action, Advice, Assessment, Observation } from "@mjers/mjers/types";
